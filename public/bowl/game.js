@@ -45,6 +45,7 @@
     if (!net) { startLane(); return; }
     net.on("code", (code) => {
       $("#codeOut").textContent = code; $("#joinHost").textContent = joinBase.replace(/^https?:\/\//, "");
+      const camHost = $("#camHost"); if (camHost) camHost.textContent = (location.origin + "/bowl/camera").replace(/^https?:\/\//, "");
       $("#qr").innerHTML = ""; try { new QRCode($("#qr"), { text: joinBase + "#" + code, width: 168, height: 168, colorDark: "#0a0c12", colorLight: "#fff", correctLevel: QRCode.CorrectLevel.M }); } catch (_) {}
       $("#pairDot").className = "dot wait"; $("#pairMsg").textContent = "Waiting for a phone…";
     });

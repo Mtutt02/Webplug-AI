@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>StrikeCast — Camera</title>
+<meta name="description" content="Control StrikeCast with your body — the camera tracks where you stand and your swing.">
+<meta name="theme-color" content="#0a0c12">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Hanken+Grotesk:wght@400;600;700;800&family=Space+Mono:wght@400;700&display=swap">
+<link rel="stylesheet" href="/bowl/app.css">
+<style>
+  html,body{overflow:hidden;height:100%}
+  .screen{position:fixed;inset:0;display:none;flex-direction:column;padding:16px;
+    padding-top:max(14px,env(safe-area-inset-top,0px))}
+  .screen.show{display:flex}
+  .beta{position:fixed;top:0;left:0;right:0;text-align:center;font-family:var(--fmono);font-size:.64rem;
+    letter-spacing:.18em;text-transform:uppercase;color:#06201d;background:var(--cast);padding:3px;z-index:20}
+  #connect{justify-content:center;gap:16px;text-align:center;align-items:center}
+  #connect h1{font-family:var(--fdisp);text-transform:uppercase;font-size:2rem}
+  .codein input{font-family:var(--fdisp);font-size:2rem;letter-spacing:.3em;text-align:center;width:100%;max-width:260px;
+    text-transform:uppercase;background:var(--ink);color:var(--pin);border:1px solid var(--ink3);border-radius:14px;padding:12px}
+
+  #cam{gap:10px;padding-top:max(26px,env(safe-area-inset-top,0px))}
+  .camwrap{flex:1;position:relative;border-radius:18px;overflow:hidden;background:#000;border:1px solid var(--ink3)}
+  video,canvas.ov{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}
+  .readout{position:absolute;left:10px;top:10px;right:10px;display:flex;justify-content:space-between;gap:8px;z-index:3}
+  .rchip{font-family:var(--fmono);font-size:.72rem;background:rgba(10,12,18,.72);border:1px solid var(--ink3);border-radius:10px;padding:6px 10px}
+  .rchip b{color:var(--cast)}
+  .swingflash{position:absolute;inset:0;display:grid;place-items:center;font-family:var(--fdisp);font-size:3rem;
+    color:var(--strike);text-shadow:0 0 40px rgba(255,90,44,.6);opacity:0;transition:opacity .1s;z-index:4;pointer-events:none}
+  .swingflash.on{opacity:1}
+  .cambar{display:flex;gap:8px;align-items:center;flex:none}
+  .balls{flex:1;display:flex;gap:7px;overflow-x:auto}
+  .ballchip{flex:none;border:1px solid var(--ink3);border-radius:10px;padding:6px 9px;background:var(--ink2);cursor:pointer;font-size:.8rem;font-weight:800}
+  .ballchip.sel{border-color:var(--pin)}
+  .ballchip i{width:11px;height:11px;border-radius:50%;display:inline-block;vertical-align:middle;margin-right:5px}
+  .btnrow{display:flex;gap:8px;flex:none}
+  .status{font-family:var(--fmono);font-size:.68rem;color:var(--muted);display:flex;gap:7px;align-items:center;justify-content:center}
+</style>
+</head>
+<body>
+<div class="beta">Camera control · beta — needs good light &amp; room to move</div>
+
+<section id="connect" class="screen show">
+  <div class="brand"><svg class="logo" viewBox="0 0 30 30"><circle cx="15" cy="15" r="14" fill="none" stroke="#1a2030" stroke-width="2"/><path d="M15 4C11 10 11 20 15 26 19 20 19 10 15 4Z" fill="#f6f1e7"/><circle cx="15" cy="9" r="2.1" fill="#ff5a2c"/></svg>Strike<span class="mk">Cast</span></div>
+  <div class="col center" style="gap:16px">
+    <p class="eyebrow cast-c">Camera control · beta</p>
+    <h1>Enter the code</h1>
+    <p class="muted" style="margin:0;max-width:30ch">Open this on a laptop or a propped-up phone that can <b>see your whole body</b>. Enter the code from the TV.</p>
+    <div class="codein"><input id="codeIn" inputmode="latin" autocapitalize="characters" maxlength="4" placeholder="····"></div>
+    <div class="status center"><span class="dot" id="cDot"></span><span id="cMsg">Waiting for a code</span></div>
+    <button class="btn cast" id="connectBtn" disabled>Connect &amp; start camera</button>
+  </div>
+</section>
+
+<section id="cam" class="screen">
+  <div class="camwrap">
+    <video id="video" playsinline muted></video>
+    <canvas class="ov" id="ov"></canvas>
+    <div class="readout">
+      <span class="rchip">stance <b id="rStance">—</b></span>
+      <span class="rchip">arm <b id="rArm">—</b></span>
+      <span class="rchip" id="rState">starting…</span>
+    </div>
+    <div class="swingflash" id="flash">SWING!</div>
+  </div>
+  <div class="cambar">
+    <div class="balls" id="ballPick"></div>
+    <button class="handtog btn ghost" id="handBtn" style="width:54px;flex:none">RH</button>
+  </div>
+  <div class="btnrow">
+    <button class="btn ghost" id="calBtn">Re-center stance</button>
+    <button class="btn primary" id="throwBtn">Throw (tap)</button>
+  </div>
+  <div class="status" id="camStatus">connecting…</div>
+</section>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="/bowl/balls.js"></script>
+<script src="/bowl/net.js"></script>
+<script type="module">
+  import { PoseLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.12";
+  const $ = (s) => document.querySelector(s);
+  const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+  const SB = window.StrikeBowl;
+
+  let net = null, hand = 1, ballId = "solid";
+  let stanceBoard = 20, baseCenter = null, lastStanceSent = 0;
+  let armed = true, lastThrow = 0;
+
+  // ---- tunables (so this is easy to dial on a real device) ----
+  const K = {
+    STANCE_RANGE: 0.22,     // how far you step (as a fraction of frame width) = full lane
+    SWING_V: 0.9,           // downward wrist speed (frame-heights/sec) that counts as a release
+    SWING_MIN_MPH: 13, SWING_MAX_MPH: 20,
+    SWING_COOLDOWN: 1200,   // ms between detected throws
+  };
+
+  // ---- connect ----
+  const codeIn = $("#codeIn"), connectBtn = $("#connectBtn");
+  const fromHash = (location.hash || "").replace(/[^A-Za-z0-9]/g, "").slice(0, 4).toUpperCase();
+  codeIn.addEventListener("input", () => { codeIn.value = codeIn.value.toUpperCase().replace(/[^A-Z0-9]/g, ""); connectBtn.disabled = codeIn.value.length !== 4; });
+  if (fromHash.length === 4) { codeIn.value = fromHash; connectBtn.disabled = false; }
+  connectBtn.addEventListener("click", start);
+
+  function start() {
+    const code = codeIn.value; if (code.length !== 4) return;
+    connectBtn.disabled = true; $("#cDot").className = "dot wait"; $("#cMsg").textContent = "Connecting…";
+    net = window.StrikeNet.join(code);
+    net.on("paired", async () => { net.send({ t: "hello", role: "camera" }); net.send({ t: "settings", ballId, hand }); await startCamera(); });
+    net.on("message", () => {});
+    net.on("error", () => { $("#cDot").className = "dot off"; $("#cMsg").textContent = "No lane with that code."; connectBtn.disabled = false; });
+    setTimeout(() => { if (!camRunning) { /* allow camera even if pairing slow */ } }, 50);
+  }
+
+  // ---- ball/hand ----
+  function buildBalls() {
+    $("#ballPick").innerHTML = SB.BALLS.map((b) => `<div class="ballchip ${b.id === ballId ? "sel" : ""}" data-ball="${b.id}"><i style="background:${b.color}"></i>${b.name}</div>`).join("");
+    $("#ballPick").querySelectorAll(".ballchip").forEach((c) => c.addEventListener("click", () => { ballId = c.dataset.ball; $("#ballPick").querySelectorAll(".ballchip").forEach((x) => x.classList.toggle("sel", x === c)); if (net) net.send({ t: "settings", ballId, hand }); }));
+  }
+  $("#handBtn").addEventListener("click", () => { hand = -hand; $("#handBtn").textContent = hand > 0 ? "RH" : "LH"; if (net) net.send({ t: "settings", ballId, hand }); });
+  $("#calBtn").addEventListener("click", () => { baseCenter = null; });
+  $("#throwBtn").addEventListener("click", () => throwShot(15.5, 320, 0));
+
+  // ---- camera + pose ----
+  let camRunning = false, pose = null, video, ov, octx;
+  async function startCamera() {
+    document.querySelector("#connect").classList.remove("show"); $("#cam").classList.add("show");
+    buildBalls();
+    video = $("#video"); ov = $("#ov"); octx = ov.getContext("2d");
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } }, audio: false });
+      video.srcObject = stream; await video.play();
+      $("#camStatus").textContent = "loading body tracker…";
+    } catch (e) { $("#camStatus").textContent = "Camera blocked — allow camera access and reload."; return; }
+    try {
+      const vision = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.12/wasm");
+      pose = await PoseLandmarker.createFromOptions(vision, {
+        baseOptions: { modelAssetPath: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task" },
+        runningMode: "VIDEO", numPoses: 1,
+      });
+    } catch (e) { $("#camStatus").textContent = "Couldn't load the body tracker (network?)."; return; }
+    camRunning = true; $("#camStatus").textContent = "Step left/right to aim · mime a bowling swing to throw";
+    requestAnimationFrame(loop);
+  }
+
+  let wristHist = [];
+  function loop() {
+    if (!camRunning) return;
+    requestAnimationFrame(loop);
+    if (video.readyState < 2) return;
+    ov.width = video.videoWidth || 640; ov.height = video.videoHeight || 480;
+    let res; try { res = pose.detectForVideo(video, performance.now()); } catch (e) { return; }
+    octx.clearRect(0, 0, ov.width, ov.height);
+    if (!res || !res.landmarks || !res.landmarks.length) { $("#rState").textContent = "step into frame"; return; }
+    const lm = res.landmarks[0];
+    drawSkeleton(lm);
+
+    // STANCE — horizontal body center (shoulders + hips). Camera is mirrored, so flip x.
+    const cx = 1 - avg([lm[11], lm[12], lm[23], lm[24]].map((p) => p.x));
+    if (baseCenter == null) baseCenter = cx;
+    const off = (cx - baseCenter) / K.STANCE_RANGE;             // -1..1 as you step
+    stanceBoard = Math.round(clamp(20 - off * 18, 2, 38));
+    $("#rStance").textContent = "board " + stanceBoard;
+    const now = performance.now();
+    if (net && now - lastStanceSent > 90) { lastStanceSent = now; net.send({ t: "stance", board: stanceBoard }); }
+
+    // SWING — dominant wrist vertical speed; a fast downward pass = release
+    const wrist = hand > 0 ? lm[16] : lm[15];                   // RH→right wrist(16), LH→left(15)
+    const hip = lm[hand > 0 ? 24 : 23];
+    wristHist.push({ y: wrist.y, x: wrist.x, t: now }); if (wristHist.length > 6) wristHist.shift();
+    let vy = 0;
+    if (wristHist.length >= 2) { const a = wristHist[0], b = wristHist[wristHist.length - 1]; vy = (b.y - a.y) / Math.max(0.001, (b.t - a.t) / 1000); }
+    $("#rArm").textContent = vy.toFixed(1);
+    $("#rState").textContent = armed ? "ready" : "…";
+    if (armed && vy > K.SWING_V && wrist.y > hip.y - 0.05 && now - lastThrow > K.SWING_COOLDOWN) {
+      lastThrow = now;
+      const speed = clamp(K.SWING_MIN_MPH + (vy - K.SWING_V) * 4, K.SWING_MIN_MPH, K.SWING_MAX_MPH);
+      const cross = (wrist.x - lm[hand > 0 ? 12 : 11].x);       // wrist crossing the body → revs + angle
+      const rev = clamp(240 + Math.abs(cross) * 900, 120, 520);
+      const ang = clamp(cross * 10 * -hand, -4, 4);
+      throwShot(speed, rev, ang);
+    }
+  }
+
+  function throwShot(speed, rev, ang) {
+    if (net) net.send({ t: "shot", ballId, hand, launchBoard: stanceBoard, launchAngle: ang, speedMph: speed, revRate: rev });
+    const f = $("#flash"); f.classList.add("on"); setTimeout(() => f.classList.remove("on"), 450);
+    $("#camStatus").textContent = `threw: ${speed.toFixed(1)} mph · ${Math.round(rev)} rpm · board ${stanceBoard}`;
+  }
+
+  const BONES = [[11,13],[13,15],[12,14],[14,16],[11,12],[11,23],[12,24],[23,24],[23,25],[25,27],[24,26],[26,28]];
+  function drawSkeleton(lm) {
+    octx.lineWidth = 4; octx.strokeStyle = "rgba(50,224,207,.85)"; octx.fillStyle = "#ff5a2c";
+    BONES.forEach(([a, b]) => { octx.beginPath(); octx.moveTo(lm[a].x * ov.width, lm[a].y * ov.height); octx.lineTo(lm[b].x * ov.width, lm[b].y * ov.height); octx.stroke(); });
+    [11,12,13,14,15,16,23,24].forEach((i) => { octx.beginPath(); octx.arc(lm[i].x * ov.width, lm[i].y * ov.height, 6, 0, 7); octx.fill(); });
+  }
+  const avg = (a) => a.reduce((s, v) => s + v, 0) / a.length;
+</script>
+</body>
+</html>

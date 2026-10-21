@@ -15,6 +15,7 @@ const CORE = [
   "/bowl/index.html",
   "/bowl/tv.html",
   "/bowl/play.html",
+  "/bowl/camera.html",
   "/bowl/app.css",
   "/bowl/net.js",
   "/bowl/balls.js",
