@@ -17,9 +17,12 @@ Two web pages that talk to each other peer-to-peer:
 | `public/bowl/play.html` | **The controller** — your phone. Reads motion (accelerometer + gyroscope), turns a swing into power / aim / hook, and sends it to the lane. |
 | `public/bowl/index.html` | Role chooser (TV vs. controller). |
 
-The phone and TV pair over **WebRTC** using a short room code (PeerJS's free
-public broker handles only the handshake — no account, no key, no server of our
-own). Once paired, swing data goes directly phone → TV.
+The phone and TV pair over **Supabase Realtime (broadcast)** using a short room
+code as the channel name. Because messages relay through Supabase's servers
+(not peer-to-peer), it works across **any** network — phone on cellular, TV on
+Wi-Fi, guest networks — with no NAT/TURN headaches. No player account, and
+nothing is stored in a database: broadcast is ephemeral pub/sub. The transport
+config (project URL + a public *publishable* key) lives in `net.js`.
 
 ### The swing
 - **Motion mode** (phones): hold the pad, swing your arm, let go. Peak
@@ -56,8 +59,10 @@ To list it on apps.webplug.co it ships as its own deploy (HTTPS) or drops into
 `public/bowl/` of the main `mtutt02/webplug` site, then is submitted at
 `apps.webplug.co/submit`.
 
-## Upgrade path
-The public WebRTC broker is great for same-wifi living-room play. For a more
-robust production transport (cross-network, reconnection), swap the handshake in
-`net.js` for **Supabase Realtime broadcast** (the webplug Supabase project) —
-same message shape, no gameplay changes.
+## Transport notes
+Pairing runs through **Supabase Realtime** on the `munch` project
+(`ubqtmlgvcyqjvdzljslh`) using a public publishable key — chosen because this
+session could reach that project. It can be repointed to the webplug Supabase
+project by changing `SB_URL` / `SB_KEY` at the top of `net.js`; the message
+shape is identical, so nothing else changes. Only ephemeral broadcast is used —
+no tables, no stored data.

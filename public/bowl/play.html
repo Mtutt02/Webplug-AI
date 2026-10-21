@@ -90,7 +90,7 @@
   <div class="meta"><span class="pill" id="tip">Tilt to aim · twist your wrist to hook</span></div>
 </section>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="/bowl/net.js"></script>
 <script>
 (function () {
@@ -123,7 +123,7 @@
     net.on("error", () => failConnect("No lane with that code. Check the code on the TV and try again."));
     clearTimeout(pairTimer);
     pairTimer = setTimeout(() => {
-      if (!isPaired) { try { net.destroy(); } catch (_) {} failConnect("Couldn't reach the lane. Make sure this phone and the TV are on the same Wi-Fi, then tap Connect again."); }
+      if (!isPaired) { try { net.destroy(); } catch (_) {} failConnect("Couldn't reach the lane. Check the code on the TV and make sure the TV page is open, then tap Connect again."); }
     }, 14000);
   }
   function failConnect(msg) { $("#cDot").className = "dot off"; $("#cMsg").textContent = msg; connectBtn.disabled = false; }

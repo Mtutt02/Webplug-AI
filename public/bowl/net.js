@@ -1,30 +1,23 @@
 /*
- * StrikeCast pairing layer — phone (controller) ↔ TV (screen) over WebRTC.
+ * StrikeCast pairing layer — phone (controller) ↔ TV (screen).
  *
- * Uses PeerJS's free public broker only for the handshake; once paired, swing
- * data goes peer-to-peer. No account, no key, no server of our own. The TV is
- * the host and owns a short room code; the phone joins by that code.
+ * Transport: Supabase Realtime "broadcast". Both devices join a channel named
+ * after the room code and exchange messages through Supabase's servers. Because
+ * it relays through a server (not peer-to-peer), it works across ANY network —
+ * phone on cellular, TV on Wi-Fi, guest networks, all fine. No account for the
+ * player, nothing stored in a database: broadcast is ephemeral pub/sub.
  *
- * Room code is a 4-char base32 (no vowels, no look-alikes) namespaced under a
- * fixed prefix so phone and TV agree on the broker id without a lookup.
+ * The room code is a 4-char base32 (no vowels, no look-alikes) and is simply the
+ * channel name both sides agree on. Handshake: the phone broadcasts `join`, the
+ * TV answers `ack`; after that, gameplay messages ride the `msg` event.
+ *
+ * Config below is a Supabase project URL + publishable key — a public client
+ * key, safe to ship in the page (that is what publishable keys are for).
  */
 (function (global) {
-  const PREFIX = "strikecast-v1-";
+  const SB_URL = "https://ubqtmlgvcyqjvdzljslh.supabase.co";
+  const SB_KEY = "sb_publishable_xKiQciToM95bDLTwRZz-uQ_Kbgu_-z9";
   const ALPHABET = "23456789CFGHJMPQRVWX"; // no 0/O/1/I/L, no vowels (no accidental words)
-
-  // ICE: STUN gets most home-router NATs across; TURN relays when the two
-  // devices can't reach each other directly (different networks, or guest-wifi
-  // client isolation). The TURN entries are best-effort free relays — if one is
-  // down the browser just falls back to the next server / to STUN.
-  const ICE = {
-    iceServers: [
-      { urls: "stun:stun.l.google.com:19302" },
-      { urls: "stun:stun1.l.google.com:19302" },
-      { urls: "turn:openrelay.metered.ca:80", username: "openrelayproject", credential: "openrelayproject" },
-      { urls: "turn:openrelay.metered.ca:443", username: "openrelayproject", credential: "openrelayproject" },
-      { urls: "turn:openrelay.metered.ca:443?transport=tcp", username: "openrelayproject", credential: "openrelayproject" },
-    ],
-  };
 
   function newCode() {
     let s = "";
@@ -41,38 +34,33 @@
     };
   }
 
+  const chanName = (code) => "strikecast-" + code;
+  let _client;
+  function client() {
+    if (!_client) _client = global.supabase.createClient(SB_URL, SB_KEY, { realtime: { params: { eventsPerSecond: 30 } } });
+    return _client;
+  }
+
   // ---- TV side: open a room, wait for one controller ----------------------
   function host() {
     const bus = emitter();
-    let code, peer, conn, tries = 0;
-
-    function open() {
-      code = newCode();
-      peer = new Peer(PREFIX + code, { debug: 1, config: ICE });
-      peer.on("open", () => bus.emit("code", code));
-      peer.on("connection", (c) => {
-        conn = c;
-        c.on("open", () => bus.emit("paired"));
-        c.on("data", (d) => bus.emit("message", d));
-        c.on("close", () => bus.emit("dropped"));
-        c.on("error", () => bus.emit("dropped"));
+    const code = newCode();
+    let paired = false;
+    const ch = client().channel(chanName(code), { config: { broadcast: { self: false } } });
+    ch.on("broadcast", { event: "join" }, () => {
+        ch.send({ type: "broadcast", event: "ack" });          // answer every join (covers retries / lost acks)
+        if (!paired) { paired = true; bus.emit("paired"); }     // but pair only once
+      })
+      .on("broadcast", { event: "msg" }, ({ payload }) => bus.emit("message", payload))
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") bus.emit("code", code);
+        else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") bus.emit("error", status);
+        else if (status === "CLOSED" && paired) bus.emit("dropped");
       });
-      peer.on("error", (err) => {
-        // taken id / network: regenerate the code a couple of times, then surface
-        if ((err.type === "unavailable-id" || err.type === "network") && tries++ < 4) {
-          try { peer.destroy(); } catch (_) {}
-          setTimeout(open, 400);
-        } else {
-          bus.emit("error", err);
-        }
-      });
-    }
-    open();
-
     return Object.assign(bus, {
       get code() { return code; },
-      send(obj) { if (conn && conn.open) conn.send(obj); },
-      destroy() { try { peer && peer.destroy(); } catch (_) {} },
+      send(obj) { ch.send({ type: "broadcast", event: "msg", payload: obj }); },
+      destroy() { try { client().removeChannel(ch); } catch (_) {} },
     });
   }
 
@@ -80,22 +68,25 @@
   function join(code) {
     const bus = emitter();
     code = (code || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4);
-    const peer = new Peer({ debug: 1, config: ICE });
-    let conn;
-
-    peer.on("open", () => {
-      conn = peer.connect(PREFIX + code, { reliable: false }); // unreliable = lower latency for a stream of swings
-      conn.on("open", () => bus.emit("paired"));
-      conn.on("data", (d) => bus.emit("message", d));
-      conn.on("close", () => bus.emit("dropped"));
-      conn.on("error", (e) => bus.emit("error", e));
-    });
-    peer.on("error", (err) => bus.emit("error", err));
-
+    let acked = false, joinTimer = null, tries = 0;
+    const ch = client().channel(chanName(code), { config: { broadcast: { self: false } } });
+    ch.on("broadcast", { event: "ack" }, () => { if (!acked) { acked = true; clearInterval(joinTimer); bus.emit("paired"); } })
+      .on("broadcast", { event: "msg" }, ({ payload }) => bus.emit("message", payload))
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") {
+          const sendJoin = () => ch.send({ type: "broadcast", event: "join" });
+          sendJoin();                                           // say hello…
+          joinTimer = setInterval(() => {                       // …and keep saying it until the TV acks
+            if (acked || tries++ > 10) { clearInterval(joinTimer); return; }
+            sendJoin();
+          }, 900);
+        } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") bus.emit("error", status);
+        else if (status === "CLOSED" && acked) bus.emit("dropped");
+      });
     return Object.assign(bus, {
       code,
-      send(obj) { if (conn && conn.open) conn.send(obj); },
-      destroy() { try { peer.destroy(); } catch (_) {} },
+      send(obj) { ch.send({ type: "broadcast", event: "msg", payload: obj }); },
+      destroy() { try { clearInterval(joinTimer); client().removeChannel(ch); } catch (_) {} },
     });
   }
 
