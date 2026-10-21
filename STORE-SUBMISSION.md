@@ -6,8 +6,9 @@ Fields marked **[you]** need your own details; everything else is filled in.
 ---
 
 ## 1. Your app's link
-- **App address:** `https://strikecast.webplug.co/bowl/`
-  - _(If not yet on the webplug subdomain, use the live deploy URL instead — e.g. the `*.vercel.app` URL. Then hit **Run checks**: it pulls the icon + screenshots from the manifest.)_
+- **App address (live now):** `https://strikecast-melivate.vercel.app/bowl/`
+  - Then hit **Run checks** — it pulls the icon + screenshots from the manifest.
+  - _Temporary URL (deployed on the melivate team). Once the Vercel connector has webplug access, this moves to `https://strikecast.webplug.co/bowl/` — swap it here before/after submitting as you prefer._
 
 ## 2. Store page
 - **App name:** `StrikeCast`
@@ -26,8 +27,8 @@ Fields marked **[you]** need your own details; everything else is filled in.
 - **Your name:** **[you]**
 - **Email:** **[you]**
 - **Developer or company name shown on the store:** `The Web Plug`
-- **Privacy policy link:** `https://strikecast.webplug.co/bowl/privacy.html`
-  - _(A real privacy page ships with the app. StrikeCast collects no personal data, so this link is a courtesy more than a requirement — but it's there and honest.)_
+- **Privacy policy link:** `https://strikecast-melivate.vercel.app/bowl/privacy.html`
+  - _(A real privacy page ships with the app. StrikeCast collects no personal data, so this link is a courtesy more than a requirement — but it's there and honest. Becomes `strikecast.webplug.co/bowl/privacy.html` after the webplug move.)_
 - **Support email shown to users (optional):** **[you]**
 
 ## 4. Agreement
