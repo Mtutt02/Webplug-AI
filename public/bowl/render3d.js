@@ -55,6 +55,61 @@
     return grp;
   }
 
+  // ---- the alley around the lane (other lanes, pin housing, ceiling, crowd) ----
+  const LANE_PITCH = LANE_HW * 2 + GUT * 2 + 0.3;
+  function maskingUnit(emissive) {
+    const m = new T.Mesh(new T.BoxGeometry(LANE_HW * 2 + GUT, 3.2, 0.5), new T.MeshStandardMaterial({ color: 0x1b2742, emissive: emissive || 0x0a1024, emissiveIntensity: 0.6, roughness: 0.6 }));
+    m.position.set(0, 3.4, -LANE_LEN - 4.8); return m;
+  }
+  function sideLane(offset) {
+    const g = new T.Group(); g.position.x = offset;
+    const l = new T.Mesh(new T.BoxGeometry(LANE_HW * 2, 0.3, LANE_LEN + 8), new T.MeshStandardMaterial({ map: laneMat.map, roughness: 0.4, metalness: 0.1 }));
+    l.position.set(0, -0.15, -LANE_LEN / 2 + 1); l.receiveShadow = true; g.add(l);
+    [-1, 1].forEach((s) => { const gg = new T.Mesh(new T.BoxGeometry(GUT, 0.5, LANE_LEN + 8), new T.MeshStandardMaterial({ color: 0x05070c })); gg.position.set(s * (LANE_HW + GUT / 2), -0.35, -LANE_LEN / 2 + 1); g.add(gg); });
+    for (let i = 0; i < 10; i++) { const pin = makePin(); pin.position.set(PINS[i].x * LANE_HW, 0, -LANE_LEN - PINS[i].y * PINROW); g.add(pin); }
+    g.add(maskingUnit(0x0a1024));
+    return g;
+  }
+  function buildCrowd() {
+    const N = 90, dummy = new T.Object3D();
+    const bodies = new T.InstancedMesh(new T.CapsuleGeometry(0.22, 0.5, 4, 6), new T.MeshStandardMaterial({ roughness: 0.85 }), N);
+    const heads = new T.InstancedMesh(new T.SphereGeometry(0.16, 8, 6), new T.MeshStandardMaterial({ color: 0x8a6b55, roughness: 0.85 }), N);
+    const pal = [0x3a4a6a, 0x6a3a4a, 0x4a6a3a, 0x6a5a3a, 0x444a55, 0x7a4a2a, 0x2a4a5a, 0x5a5a5a];
+    let k = 0;
+    for (const side of [-1, 1]) for (let row = 0; row < 4 && k < N; row++) for (let seat = 0; seat < 12 && k < N; seat++) {
+      const x = side * (8.5 + row * 1.15), z = 9 - seat * 1.5, y = 0.5 + row * 0.75;
+      dummy.position.set(x + (Math.random() - .5) * .3, y, z + (Math.random() - .5) * .3);
+      dummy.rotation.y = side > 0 ? -1.3 : 1.3; dummy.scale.setScalar(0.9 + Math.random() * 0.3); dummy.updateMatrix();
+      bodies.setMatrixAt(k, dummy.matrix); bodies.setColorAt(k, new T.Color(pal[(Math.random() * pal.length) | 0]));
+      dummy.position.y += 0.62 * dummy.scale.y; dummy.updateMatrix(); heads.setMatrixAt(k, dummy.matrix);
+      k++;
+    }
+    bodies.count = k; heads.count = k; if (bodies.instanceColor) bodies.instanceColor.needsUpdate = true;
+    scene.add(bodies, heads);
+    for (const side of [-1, 1]) for (let row = 0; row < 4; row++) { const p = new T.Mesh(new T.BoxGeometry(2.4, 0.5, 20), new T.MeshStandardMaterial({ color: 0x14171f, roughness: 0.9 })); p.position.set(side * (8.5 + row * 1.15), row * 0.75, 1); scene.add(p); }
+  }
+  function buildEnv() {
+    // concourse / settee floor
+    const floor = new T.Mesh(new T.BoxGeometry(70, 0.2, 34), new T.MeshStandardMaterial({ color: 0x12151d, roughness: 0.95 }));
+    floor.position.set(0, -0.55, 8); floor.receiveShadow = true; scene.add(floor);
+    // approach wood behind the foul line
+    const appr = new T.Mesh(new T.BoxGeometry(LANE_HW * 2 + GUT * 2, 0.26, 9), new T.MeshStandardMaterial({ color: 0x6e4a24, roughness: 0.6 }));
+    appr.position.set(0, -0.13, 5.5); scene.add(appr);
+    // adjacent lanes
+    [-2, -1, 1, 2].forEach((o) => scene.add(sideLane(o * LANE_PITCH)));
+    // this lane's masking unit (brighter)
+    scene.add(maskingUnit(0x2a0f04));
+    // ceiling + light strips
+    const ceil = new T.Mesh(new T.BoxGeometry(70, 0.3, LANE_LEN + 50), new T.MeshStandardMaterial({ color: 0x0b0e15, roughness: 0.95 }));
+    ceil.position.set(0, 9.2, -LANE_LEN / 2 + 5); scene.add(ceil);
+    for (let z = 2; z > -LANE_LEN; z -= 11) { const strip = new T.Mesh(new T.BoxGeometry(58, 0.1, 1.3), new T.MeshBasicMaterial({ color: 0x2c3a58 })); strip.position.set(0, 9.0, z); scene.add(strip); }
+    // side walls
+    [-1, 1].forEach((s) => { const w = new T.Mesh(new T.BoxGeometry(0.5, 11, LANE_LEN + 50), new T.MeshStandardMaterial({ color: 0x0f1219, roughness: 0.95 })); w.position.set(s * 24, 4.5, -LANE_LEN / 2 + 5); scene.add(w); });
+    // back wall behind the gallery
+    const back = new T.Mesh(new T.BoxGeometry(70, 11, 0.5), new T.MeshStandardMaterial({ color: 0x0c0f16, roughness: 0.95 })); back.position.set(0, 4.5, 16); scene.add(back);
+    buildCrowd();
+  }
+
   function init(container) {
     renderer = new T.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
     renderer.setPixelRatio(Math.min(2, global.devicePixelRatio || 1));
@@ -65,12 +120,13 @@
     scene = new T.Scene(); scene.background = new T.Color(0x06080d); scene.fog = new T.Fog(0x06080d, 40, 95);
     cam = new T.PerspectiveCamera(55, 1, 0.1, 200);
 
-    scene.add(new T.AmbientLight(0x9fb0d0, 0.55));
-    const key = new T.DirectionalLight(0xfff0e0, 1.1); key.position.set(4, 16, 10); key.castShadow = true;
+    scene.add(new T.AmbientLight(0x9fb0d0, 0.72));
+    const key = new T.DirectionalLight(0xfff0e0, 1.15); key.position.set(4, 16, 10); key.castShadow = true;
     key.shadow.mapSize.set(1024, 1024); key.shadow.camera.left = -8; key.shadow.camera.right = 8; key.shadow.camera.top = 6; key.shadow.camera.bottom = -70; key.shadow.camera.far = 120;
     scene.add(key);
-    const p1 = new T.PointLight(0xff5a2c, 60, 40); p1.position.set(-6, 9, -5); scene.add(p1);
-    const p2 = new T.PointLight(0x32e0cf, 50, 50); p2.position.set(6, 9, -40); scene.add(p2);
+    const fill = new T.DirectionalLight(0xbfd0ff, 0.35); fill.position.set(-6, 8, 6); scene.add(fill);
+    const p1 = new T.PointLight(0xff5a2c, 34, 46); p1.position.set(-9, 7, -16); scene.add(p1);
+    const p2 = new T.PointLight(0x32e0cf, 32, 55); p2.position.set(9, 7, -44); scene.add(p2);
 
     // lane
     laneMat = new T.MeshStandardMaterial({ map: laneTexture(), roughness: 0.35, metalness: 0.15 });
@@ -106,7 +162,8 @@
     returnBall.position.set(0, 0.65, 0.2); rack.add(returnBall);
     rack.position.set(LANE_HW + GUT + 0.9, 0, 1.8); scene.add(rack);
 
-    camSet("ready", 0, true);
+    buildEnv();
+    camSet("establish", 0, true);
     resize();
     global.addEventListener("resize", resize);
     loop();
@@ -128,9 +185,10 @@
   function camSet(mode, lx, snap) {
     camMode = mode;
     let pos, look;
-    if (mode === "ready") { pos = new T.Vector3((lx || 0) * LANE_HW * 0.6, 1.0, 4.2); look = new T.Vector3(0, 0.4, -18); }
+    if (mode === "ready") { pos = new T.Vector3((lx || 0) * LANE_HW * 0.6, 1.6, 6.0); look = new T.Vector3(0, 0.7, -18); }
+    else if (mode === "establish") { pos = new T.Vector3(0, 5.2, 12.5); look = new T.Vector3(0, 1.4, -22); }   // wide: shows the alley + crowd
     else if (mode === "pins") { pos = new T.Vector3(0, 2.4, -LANE_LEN + 7); look = new T.Vector3(0, 0.6, -LANE_LEN - 1); }
-    else { pos = new T.Vector3(0, 1.0, 4.2); look = new T.Vector3(0, 0.4, -18); }
+    else { pos = new T.Vector3(0, 1.6, 6.0); look = new T.Vector3(0, 0.7, -18); }
     camTarget.copy(pos); cam.userData.look = look;
     if (snap) { cam.position.copy(pos); cam.lookAt(look); }
   }
@@ -160,8 +218,8 @@
     const from = new T.Vector3(LANE_HW + GUT + 0.6, BR, 2.0);
     const to = new T.Vector3(0.0, BR, 0.35);
     ball.position.copy(from); ball.rotation.set(0, 0, 0);
-    deliverState = { from, to, t: 0, dur: 0.95, onReady };
-    camSet("ready", 0);
+    deliverState = { from, to, t: 0, dur: 1.1, onReady };
+    camSet("establish", 0);                     // wide alley shot while the ball comes up
   }
   function showReturn(on) { if (returnBall) returnBall.visible = on !== false; }
 
@@ -192,7 +250,7 @@
       const np = deliverState.from.clone().lerp(deliverState.to, e);
       const dz = np.z - ball.position.z, dx = np.x - ball.position.x;
       ball.position.copy(np); ball.rotateOnWorldAxis(new T.Vector3(1, 0, 0), -dz / BR); ball.rotateOnWorldAxis(new T.Vector3(0, 0, 1), -dx / BR);
-      if (p >= 1) { const cb = deliverState.onReady; deliverState = null; if (cb) cb(); }
+      if (p >= 1) { const cb = deliverState.onReady; deliverState = null; camSet("ready", 0); if (cb) cb(); }
     }
     // pin tumble
     for (let i = 0; i < pins.length; i++) {
