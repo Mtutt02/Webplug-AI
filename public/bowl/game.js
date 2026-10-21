@@ -180,6 +180,7 @@
     if (!d || typeof d !== "object") return;
     if (d.t === "hello") { setStatus("on", "phone connected"); if (net) net.send({ t: "config", mode, oil: oilId }); }
     else if (d.t === "settings") { bowler = { ballId: d.ballId || bowler.ballId, hand: d.hand || bowler.hand }; showBowler(); }
+    else if (d.t === "stance") { if (!busy) A3D.aimBall((20 - d.board) / 19); }
     else if (d.t === "shot") throwShot(d);
   }
   function showBowler() { const b = ballOf(bowler.ballId); $("#ballName").textContent = b.name; $("#ballName").style.color = b.color; $("#handName").textContent = bowler.hand > 0 ? "RH" : "LH"; }

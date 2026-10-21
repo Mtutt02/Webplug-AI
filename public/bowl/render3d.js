@@ -221,6 +221,8 @@
     deliverState = { from, to, t: 0, dur: 1.1, onReady };
     camSet("establish", 0);                     // wide alley shot while the ball comes up
   }
+  // move the resting ball sideways to show the bowler's stance as they tilt to aim
+  function aimBall(lx) { if (!ball || rollState || deliverState) return; ball.position.x = (lx || 0) * LANE_HW; ball.position.z = 0.35; camSet("ready", lx || 0); }
   function showReturn(on) { if (returnBall) returnBall.visible = on !== false; }
 
   function resize() {
@@ -267,5 +269,5 @@
     renderer.render(scene, cam);
   }
 
-  global.Arena3D = { init, resetRack, setStanding, placeBall, deliverBall, rollBall, tumble, showReturn, resize, camSet, PINS };
+  global.Arena3D = { init, resetRack, setStanding, placeBall, deliverBall, aimBall, rollBall, tumble, showReturn, resize, camSet, PINS };
 })(window);
