@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>StrikeCast — Lane</title>
-<meta name="description" content="The StrikeCast lane. Cast your phone swing onto the big screen.">
+<meta name="description" content="The StrikeCast lane — a real hook-physics bowling simulator you cast to the big screen.">
 <meta name="theme-color" content="#0a0c12">
 <link rel="manifest" href="/bowl/manifest.webmanifest">
 <link rel="apple-touch-icon" href="/bowl/apple-touch-icon.png">
@@ -15,66 +15,91 @@
   html,body{overflow:hidden}
   .screen{position:fixed;inset:0;display:none;flex-direction:column}
   .screen.show{display:flex}
+  #home,#opt,#pair{align-items:center;justify-content:center;padding:24px}
+  .panel{max-width:560px;width:100%}
 
-  /* ---- pairing / setup ---- */
-  #pair,#setup{align-items:center;justify-content:center;padding:24px}
-  .panel{max-width:520px;width:100%}
+  /* home */
+  .modebtns{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:8px}
+  .modebtn{background:var(--ink2);border:1px solid var(--ink3);border-radius:20px;padding:28px 20px;cursor:pointer;text-align:left}
+  .modebtn:hover{border-color:var(--strike)}
+  .modebtn .big{font-family:var(--fdisp);font-size:1.9rem;text-transform:uppercase}
+  .modebtn small{color:var(--muted);font-size:.9rem}
+  .modebtn.g:hover{border-color:var(--cast)}
+
+  /* options */
+  .pickrow{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+  .pickrow button{font-family:var(--fmono);font-size:.82rem;border:1px solid var(--ink3);background:var(--ink2);color:var(--pin);border-radius:999px;padding:9px 14px;cursor:pointer}
+  .pickrow button.sel{background:var(--strike);color:#1a0a04;border-color:var(--strike)}
+  #countPick button.sel{background:var(--cast);color:#06201d;border-color:var(--cast)}
+  .optlabel{font-family:var(--fmono);font-size:.7rem;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);margin-top:18px}
   .qrbox{background:#fff;border-radius:16px;padding:16px;width:200px;height:200px;display:grid;place-items:center;margin-inline:auto}
-  #qr img,#qr canvas{display:block}
-  .joinurl{word-break:break-all}
-  .count{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
-  .count button{font-family:var(--fdisp);font-size:1.6rem;width:58px;height:58px;border-radius:14px;
-    border:1px solid var(--ink3);background:var(--ink2);color:var(--pin);cursor:pointer}
-  .count button.sel{background:var(--strike);color:#1a0a04;border-color:var(--strike)}
 
-  /* ---- game ---- */
-  #game{background:#06080d}
-  .hud{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 18px;
-    padding-top:max(12px,env(safe-area-inset-top,0px));background:linear-gradient(#0a0c12,transparent)}
-  .nowup{display:flex;align-items:center;gap:10px}
-  .nowup .who{font-family:var(--fdisp);font-size:1.5rem;text-transform:uppercase}
-  .frameno{font-family:var(--fmono);font-size:.8rem;letter-spacing:.16em;color:var(--muted)}
-  .hud{flex:none}
-  canvas{flex:1 1 0;min-height:0;width:100%;display:block}
-  .toast{position:absolute;left:50%;top:38%;transform:translate(-50%,-50%) scale(.6);opacity:0;
-    font-family:var(--fdisp);font-size:clamp(3rem,13vw,7rem);text-transform:uppercase;letter-spacing:.04em;
-    color:var(--strike);text-shadow:0 0 50px rgba(255,90,44,.6);pointer-events:none;transition:all .35s cubic-bezier(.2,1.4,.4,1)}
+  /* lane */
+  #laneScreen{background:#06080d}
+  .hud{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 18px;padding-top:max(10px,env(safe-area-inset-top,0px));background:linear-gradient(#0a0c12,transparent);flex:none;flex-wrap:wrap}
+  .hudL{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  .tag{font-family:var(--fmono);font-size:.7rem;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);border:1px solid var(--ink3);border-radius:999px;padding:5px 11px}
+  .tag b{color:var(--cast);font-weight:400}
+  .bowler{font-family:var(--fbody);font-weight:800}
+  .who{font-family:var(--fdisp);font-size:1.4rem;text-transform:uppercase}
+  .frameno{font-family:var(--fmono);font-size:.76rem;color:var(--muted)}
+  .lanewrap{flex:1 1 0;min-height:0;display:flex}
+  canvas{flex:1 1 0;min-width:0;width:100%;display:block}
+  .side{width:260px;flex:none;background:#0a0c12;border-left:1px solid var(--ink3);padding:16px;overflow-y:auto}
+  .side h3{font-family:var(--fmono);font-size:.7rem;letter-spacing:.2em;text-transform:uppercase;color:var(--cast);margin-bottom:10px}
+  .trow{display:flex;justify-content:space-between;align-items:baseline;padding:7px 0;border-bottom:1px solid var(--ink3)}
+  .tk{font-family:var(--fmono);font-size:.74rem;color:var(--muted)}
+  .tv{font-family:var(--fbody);font-weight:700;font-variant-numeric:tabular-nums}
+  .tv.res{color:var(--strike)}
+  .stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:16px}
+  .stat{background:var(--ink2);border:1px solid var(--ink3);border-radius:12px;padding:10px 8px;text-align:center}
+  .sv{font-family:var(--fdisp);font-size:1.2rem}.sk{font-family:var(--fmono);font-size:.6rem;letter-spacing:.1em;color:var(--muted);text-transform:uppercase}
+  .toast{position:absolute;left:40%;top:38%;transform:translate(-50%,-50%) scale(.6);opacity:0;font-family:var(--fdisp);font-size:clamp(3rem,10vw,6rem);text-transform:uppercase;color:var(--strike);text-shadow:0 0 50px rgba(255,90,44,.6);pointer-events:none;transition:all .35s cubic-bezier(.2,1.4,.4,1);z-index:5}
   .toast.show{opacity:1;transform:translate(-50%,-50%) scale(1)}
   .toast.spare{color:var(--cast);text-shadow:0 0 50px rgba(50,224,207,.6)}
-
-  /* scoreboard */
-  .board{flex:none;background:#0a0c12;border-top:1px solid var(--ink3);overflow-x:auto;padding-bottom:max(0px,env(safe-area-inset-bottom,0px))}
+  .board{flex:none;background:#0a0c12;border-top:1px solid var(--ink3);overflow-x:auto}
   table{border-collapse:collapse;width:100%;min-width:640px;font-family:var(--fmono)}
   th,td{border:1px solid var(--ink3);text-align:center;padding:4px 2px;font-size:.78rem}
-  th{color:var(--muted);font-weight:400;letter-spacing:.08em}
+  th{color:var(--muted);font-weight:400}
   .pname{text-align:left;padding-left:10px;font-family:var(--fbody);font-weight:800;white-space:nowrap}
   tr.active .pname{color:var(--strike)}
   .frame{position:relative;height:38px;min-width:46px}
   .balls{position:absolute;top:0;right:0;display:flex}
-  .balls span{width:16px;height:16px;line-height:16px;border-left:1px solid var(--ink3);border-bottom:1px solid var(--ink3);
-    font-size:.72rem;color:var(--pin)}
-  .balls span.x{color:var(--strike)} .balls span.sp{color:var(--cast)}
-  .total{position:absolute;bottom:2px;left:0;right:0;font-size:.9rem;font-weight:700;color:var(--pin)}
-  .f10{min-width:66px}
-  .status{font-family:var(--fmono);font-size:.72rem;color:var(--muted);display:flex;align-items:center;gap:8px}
-
-  .btnrow{display:flex;gap:12px;margin-top:6px}
+  .balls span{width:16px;height:16px;line-height:16px;border-left:1px solid var(--ink3);border-bottom:1px solid var(--ink3);font-size:.72rem}
+  .balls span.x{color:var(--strike)}.balls span.sp{color:var(--cast)}
+  .total{position:absolute;bottom:2px;left:0;right:0;font-size:.9rem;font-weight:700}
+  @media (max-width:760px){ .side{width:100%;border-left:none;border-top:1px solid var(--ink3);max-height:40%} .lanewrap{flex-direction:column} }
 </style>
 </head>
 <body>
 
-<!-- SETUP -->
-<section id="setup" class="screen show">
+<!-- HOME -->
+<section id="home" class="screen show">
   <div class="panel col center">
     <div class="brand"><svg class="logo" viewBox="0 0 30 30"><circle cx="15" cy="15" r="14" fill="none" stroke="#1a2030" stroke-width="2"/><path d="M15 4C11 10 11 20 15 26 19 20 19 10 15 4Z" fill="#f6f1e7"/><circle cx="15" cy="9" r="2.1" fill="#ff5a2c"/></svg>Strike<span class="mk">Cast</span></div>
-    <p class="eyebrow">Set up the lane</p>
-    <h1 class="disp" style="font-size:2.4rem">How many bowlers?</h1>
-    <div class="count" id="count">
-      <button data-n="1" class="sel">1</button><button data-n="2">2</button><button data-n="3">3</button>
-      <button data-n="4">4</button><button data-n="5">5</button><button data-n="6">6</button>
+    <p class="eyebrow">Hook-physics bowling · on the big screen</p>
+    <div class="modebtns">
+      <button class="modebtn" data-mode="practice"><div class="big">Practice</div><small>Unlimited shots. Pick a ball &amp; lane, groove your line, read the telemetry.</small></button>
+      <button class="modebtn g" data-mode="game"><div class="big">Game</div><small>Scored 10-frame game, 1–6 bowlers, pass the phone around.</small></button>
     </div>
-    <p class="muted" style="margin:0">Pass the phone around — everyone bowls their own frames.</p>
-    <button class="btn cast" id="toPair">Open the lane →</button>
+  </div>
+</section>
+
+<!-- OPTIONS -->
+<section id="opt" class="screen">
+  <div class="panel card col center">
+    <p class="eyebrow"><span id="optMode">Practice</span> · set the house</p>
+    <div style="width:100%">
+      <div class="optlabel">Lane oil pattern</div>
+      <div class="pickrow" id="oilPick">
+        <button data-oil="house" class="sel">House Shot</button><button data-oil="sport">Sport / Flat</button><button data-oil="dry">Dry / Burnt</button><button data-oil="heavy">Heavy Oil</button>
+      </div>
+      <div id="gameOpts" hidden>
+        <div class="optlabel">Bowlers</div>
+        <div class="pickrow" id="countPick"><button data-n="1" class="sel">1</button><button data-n="2">2</button><button data-n="3">3</button><button data-n="4">4</button><button data-n="5">5</button><button data-n="6">6</button></div>
+      </div>
+    </div>
+    <div class="row" style="width:100%;margin-top:8px"><button class="btn ghost" id="optBack">← Back</button><button class="btn cast" id="optGo">Open the lane →</button></div>
   </div>
 </section>
 
@@ -83,33 +108,43 @@
   <div class="panel card col center">
     <p class="eyebrow">Scan to grab the controller</p>
     <div class="qrbox"><div id="qr"></div></div>
-    <p class="muted" style="margin:0">or go to <b class="joinurl" id="joinHost"></b> and enter</p>
+    <p class="muted" style="margin:0">or go to <b id="joinHost"></b> and enter</p>
     <div class="code" id="codeOut">····</div>
     <div class="status"><span class="dot wait" id="pairDot"></span><span id="pairMsg">Opening lane…</span></div>
-    <div class="btnrow">
-      <button class="btn ghost" id="backSetup">← Back</button>
-      <button class="btn primary" id="skipPair" title="Bowl on this screen with touch/keys">Practice without a phone</button>
-    </div>
+    <div class="row"><button class="btn ghost" id="backHome2">← Back</button><button class="btn primary" id="skipPair">Practice without a phone</button></div>
   </div>
 </section>
 
-<!-- GAME -->
-<section id="game" class="screen">
+<!-- LANE -->
+<section id="laneScreen" class="screen">
   <div class="hud">
-    <div class="nowup"><span class="who" id="whoUp">Player 1</span><span class="frameno" id="frameNo">Frame 1 · Ball 1</span></div>
-    <div class="status"><span class="dot" id="gameDot"></span><span id="gameMsg">controller</span></div>
+    <div class="hudL">
+      <span class="who" id="whoUp" hidden>Player 1</span>
+      <span class="tag" id="modeTag">Practice</span>
+      <span class="tag">Oil <b id="oilTag">House Shot</b></span>
+      <span class="tag">Ball <b class="bowler" id="ballName">Hammer</b></span>
+      <span class="tag"><b class="bowler" id="handName">RH</b></span>
+      <span class="frameno" id="frameNo" hidden></span>
+    </div>
+    <div class="status"><span class="dot" id="laneDot"></span><span id="laneMsg">controller</span></div>
   </div>
-  <canvas id="lane"></canvas>
+  <div class="lanewrap">
+    <canvas id="lane"></canvas>
+    <aside class="side" id="practicePanel">
+      <h3>Shot telemetry</h3>
+      <div id="telemetry"></div>
+      <div class="stats" id="pstats"></div>
+    </aside>
+  </div>
   <div class="toast" id="toast">STRIKE!</div>
-  <div class="board"><table id="board"></table></div>
+  <div class="board" id="boardWrap" hidden><table id="board"></table></div>
 </section>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="/bowl/balls.js"></script>
 <script src="/bowl/net.js"></script>
 <script src="/bowl/game.js"></script>
-<script>
-  if ("serviceWorker" in navigator) navigator.serviceWorker.register("/bowl/sw.js").catch(() => {});
-</script>
+<script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("/bowl/sw.js").catch(() => {});</script>
 </body>
 </html>

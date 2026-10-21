@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <title>StrikeCast — Controller</title>
-<meta name="description" content="Turn your phone into a bowling ball. Swing to roll it onto the TV.">
+<meta name="description" content="Your phone is the bowling ball — swing to roll, twist your wrist to hook.">
 <meta name="theme-color" content="#0a0c12">
 <link rel="manifest" href="/bowl/manifest.webmanifest">
 <link rel="apple-touch-icon" href="/bowl/apple-touch-icon.png">
@@ -13,41 +13,54 @@
 <link rel="stylesheet" href="/bowl/app.css">
 <style>
   html,body{overflow:hidden;height:100%}
-  .screen{position:fixed;inset:0;display:none;flex-direction:column;padding:22px;
-    padding-top:max(22px,env(safe-area-inset-top,0px));padding-bottom:max(22px,env(safe-area-inset-bottom,0px))}
+  .screen{position:fixed;inset:0;display:none;flex-direction:column;padding:16px;
+    padding-top:max(14px,env(safe-area-inset-top,0px));padding-bottom:max(14px,env(safe-area-inset-bottom,0px))}
   .screen.show{display:flex}
-  .top{display:flex;align-items:center;justify-content:space-between;gap:10px}
-  .status{font-family:var(--fmono);font-size:.72rem;letter-spacing:.1em;color:var(--muted);display:flex;align-items:center;gap:8px}
+  .top{display:flex;align-items:center;justify-content:space-between;gap:8px;flex:none}
+  .status{font-family:var(--fmono);font-size:.68rem;letter-spacing:.08em;color:var(--muted);display:flex;align-items:center;gap:7px}
 
   /* connect */
-  #connect{justify-content:center;gap:20px;text-align:center;align-items:center}
-  #connect h1{font-family:var(--fdisp);text-transform:uppercase;font-size:2.4rem}
-  .codein{display:flex;gap:10px;justify-content:center}
-  .codein input{font-family:var(--fdisp);font-size:2rem;letter-spacing:.3em;text-align:center;width:100%;
-    max-width:260px;text-transform:uppercase;background:var(--ink);color:var(--pin);border:1px solid var(--ink3);
-    border-radius:14px;padding:12px}
+  #connect{justify-content:center;gap:18px;text-align:center;align-items:center}
+  #connect h1{font-family:var(--fdisp);text-transform:uppercase;font-size:2.2rem}
+  .codein input{font-family:var(--fdisp);font-size:2rem;letter-spacing:.3em;text-align:center;width:100%;max-width:260px;
+    text-transform:uppercase;background:var(--ink);color:var(--pin);border:1px solid var(--ink3);border-radius:14px;padding:12px}
 
   /* controller */
-  #ctl{justify-content:space-between}
-  .nowup{text-align:center}
-  .nowup .who{font-family:var(--fdisp);font-size:1.8rem;text-transform:uppercase}
-  .nowup .fr{font-family:var(--fmono);font-size:.76rem;color:var(--muted);letter-spacing:.12em}
+  #ctl{gap:12px}
+  .settings{display:flex;gap:8px;flex:none}
+  .balls{flex:1;display:flex;gap:7px;overflow-x:auto;padding-bottom:2px;-webkit-overflow-scrolling:touch}
+  .ballchip{flex:none;border:1px solid var(--ink3);border-radius:12px;padding:7px 11px;background:var(--ink2);cursor:pointer;min-width:84px}
+  .ballchip.sel{border-color:var(--pin)}
+  .ballchip .dot2{width:14px;height:14px;border-radius:50%;display:inline-block;vertical-align:middle;margin-right:6px}
+  .ballchip .bn{font-weight:800;font-size:.84rem}
+  .ballchip .bt{font-family:var(--fmono);font-size:.56rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+  .handtog{flex:none;border:1px solid var(--ink3);border-radius:12px;background:var(--ink2);color:var(--pin);
+    font-family:var(--fdisp);font-size:1.1rem;width:52px;cursor:pointer}
 
-  .pad{flex:1;margin:14px 0;border-radius:28px;border:1px solid var(--ink3);background:
-    radial-gradient(120% 90% at 50% 15%, rgba(255,90,44,.14), transparent 60%), var(--ink2);
-    position:relative;display:grid;place-items:center;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none}
-  .pad.armed{border-color:var(--strike);box-shadow:inset 0 0 60px rgba(255,90,44,.25)}
-  .ring{width:min(62vw,260px);aspect-ratio:1}
-  .padlabel{position:absolute;bottom:22px;left:0;right:0;text-align:center;font-weight:800;font-size:1.05rem;color:var(--pin)}
-  .padhint{position:absolute;top:20px;left:0;right:0;text-align:center;font-family:var(--fmono);font-size:.72rem;
-    letter-spacing:.12em;color:var(--muted)}
-  .spin-ind{position:absolute;bottom:58px;left:0;right:0;text-align:center;font-family:var(--fmono);font-size:.8rem;color:var(--cast)}
+  .line{flex:none;background:var(--ink2);border:1px solid var(--ink3);border-radius:14px;padding:12px 14px}
+  .line .lh{display:flex;justify-content:space-between;font-family:var(--fmono);font-size:.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.1em}
+  .line .lh b{color:var(--cast);font-size:1.1rem;font-family:var(--fdisp)}
+  input[type=range]{width:100%;accent-color:var(--strike);margin-top:8px}
+  .tilthint{font-family:var(--fmono);font-size:.72rem;color:var(--muted);text-align:center;margin-top:6px}
+  .tiltbar{height:8px;border-radius:5px;background:var(--ink3);margin-top:8px;position:relative;overflow:hidden}
+  .tiltbar i{position:absolute;top:0;bottom:0;width:14px;border-radius:5px;background:var(--cast);left:50%;transform:translateX(-50%)}
 
-  .meta{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
-  .modeToggle{background:none;border:none;color:var(--muted);font-family:var(--fmono);font-size:.74rem;
-    text-decoration:underline;cursor:pointer;letter-spacing:.08em}
-  .flash{animation:fl .4s ease}
-  @keyframes fl{0%{background:rgba(50,224,207,.25)}100%{background:transparent}}
+  .pad{flex:1;min-height:150px;border-radius:24px;border:1px solid var(--ink3);position:relative;display:grid;place-items:center;
+    overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none;
+    background:radial-gradient(120% 90% at 50% 12%, rgba(255,90,44,.12), transparent 60%), var(--ink2)}
+  .pad.armed{border-color:var(--strike);box-shadow:inset 0 0 50px rgba(255,90,44,.22)}
+  .ring{width:min(54vw,220px);aspect-ratio:1}
+  .padlabel{position:absolute;bottom:16px;left:0;right:0;text-align:center;font-weight:800;font-size:1rem}
+  .padhint{position:absolute;top:14px;left:0;right:0;text-align:center;font-family:var(--fmono);font-size:.68rem;letter-spacing:.1em;color:var(--muted)}
+  .revind{position:absolute;bottom:46px;left:0;right:0;text-align:center;font-family:var(--fmono);font-size:.78rem;color:var(--cast)}
+  .grab{position:absolute;inset:0;display:grid;place-items:center;background:rgba(10,12,18,.82);z-index:2}
+  .grab.hide{display:none}
+  .grabbtn{font-family:var(--fdisp);font-size:1.6rem;text-transform:uppercase;background:var(--cast);color:#06201d;border:none;border-radius:16px;padding:16px 28px;cursor:pointer}
+
+  .result{flex:none;text-align:center;font-family:var(--fmono);font-size:.8rem;color:var(--muted);min-height:18px}
+  .result b{color:var(--strike)}
+  .modeToggle{background:none;border:none;color:var(--muted);font-family:var(--fmono);font-size:.7rem;text-decoration:underline;cursor:pointer}
+  .flash{animation:fl .4s ease}@keyframes fl{0%{background:rgba(50,224,207,.25)}100%{background:transparent}}
 </style>
 </head>
 <body>
@@ -55,51 +68,68 @@
 <!-- CONNECT -->
 <section id="connect" class="screen show">
   <div class="brand"><svg class="logo" viewBox="0 0 30 30"><circle cx="15" cy="15" r="14" fill="none" stroke="#1a2030" stroke-width="2"/><path d="M15 4C11 10 11 20 15 26 19 20 19 10 15 4Z" fill="#f6f1e7"/><circle cx="15" cy="9" r="2.1" fill="#ff5a2c"/></svg>Strike<span class="mk">Cast</span></div>
-  <div class="col center" style="gap:18px">
+  <div class="col center" style="gap:16px">
     <p class="eyebrow">Pair with the big screen</p>
     <h1>Enter the code</h1>
-    <p class="muted" style="margin:0">It's showing on the TV / iPad. Or scan the QR to skip this.</p>
+    <p class="muted" style="margin:0">Shown on the TV / iPad. Or scan the QR to skip this.</p>
     <div class="codein"><input id="codeIn" inputmode="latin" autocapitalize="characters" autocomplete="off" maxlength="4" placeholder="····"></div>
     <div class="status center"><span class="dot" id="cDot"></span><span id="cMsg">Waiting for a code</span></div>
     <button class="btn primary" id="connectBtn" disabled>Connect</button>
   </div>
-  <div></div>
 </section>
 
 <!-- CONTROLLER -->
 <section id="ctl" class="screen">
   <div class="top">
-    <div class="status"><span class="dot on" id="gDot"></span><span id="gMsg">connected</span></div>
-    <button class="modeToggle" id="modeBtn">use swipe instead</button>
+    <div class="status"><span class="dot on" id="gDot"></span><span id="gMsg">connected</span> · <span id="modeLbl">practice</span></div>
+    <button class="modeToggle" id="swipeToggle">use swipe</button>
   </div>
-  <div class="nowup"><div class="who" id="who">Your turn</div><div class="fr" id="fr">Frame 1 · Ball 1</div></div>
+
+  <div class="settings">
+    <div class="balls" id="ballPick"></div>
+    <button class="handtog" id="handBtn" title="Handedness">RH</button>
+  </div>
+
+  <div class="line" id="lineBox">
+    <div class="lh" id="sliderLine"><span>Your line</span><span>board <b id="boardVal">14</b></span></div>
+    <input type="range" id="boardSlider" min="2" max="38" value="14">
+    <div class="lh" style="margin-top:10px"><span>Target angle</span><span><b id="angVal">0.0</b>°</span></div>
+    <input type="range" id="angSlider" min="-30" max="30" value="0">
+    <div class="tilthint" id="tiltHint" hidden>Tilt the phone left / right to aim</div>
+    <div class="tiltbar" id="tiltBar" hidden><i id="tiltDot"></i></div>
+  </div>
 
   <div class="pad" id="pad">
-    <div class="padhint" id="hint">Hold, swing your arm forward, let go</div>
+    <div class="padhint" id="hint">Hold, swing your arm, snap your wrist, let go</div>
     <svg class="ring" viewBox="0 0 120 120">
       <circle cx="60" cy="60" r="52" fill="none" stroke="#1a2030" stroke-width="10"/>
-      <circle id="ringFill" cx="60" cy="60" r="52" fill="none" stroke="#ff5a2c" stroke-width="10" stroke-linecap="round"
-        transform="rotate(-90 60 60)" stroke-dasharray="326.7" stroke-dashoffset="326.7"/>
-      <text id="pwr" x="60" y="58" text-anchor="middle" font-family="Anton,sans-serif" font-size="30" fill="#f6f1e7">0%</text>
-      <text x="60" y="76" text-anchor="middle" font-family="Space Mono,monospace" font-size="7" fill="#9199ad" letter-spacing="2">POWER</text>
+      <circle id="ringFill" cx="60" cy="60" r="52" fill="none" stroke="#ff5a2c" stroke-width="10" stroke-linecap="round" transform="rotate(-90 60 60)" stroke-dasharray="326.7" stroke-dashoffset="326.7"/>
+      <text id="mph" x="60" y="56" text-anchor="middle" font-family="Anton,sans-serif" font-size="26" fill="#f6f1e7">—</text>
+      <text x="60" y="74" text-anchor="middle" font-family="Space Mono,monospace" font-size="7" fill="#9199ad" letter-spacing="2">MPH</text>
     </svg>
-    <div class="spin-ind" id="spinInd"></div>
-    <div class="padlabel" id="padLabel">HOLD TO AIM · SWING TO THROW</div>
+    <div class="revind" id="revInd"></div>
+    <div class="padlabel" id="padLabel">GRAB YOUR BALL</div>
+    <div class="grab" id="grabOverlay"><button class="grabbtn" id="grabBtn">🎳 Grab ball</button></div>
   </div>
 
-  <div class="meta"><span class="pill" id="tip">Tilt to aim · twist your wrist to hook</span></div>
+  <div class="result" id="result"></div>
 </section>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="/bowl/balls.js"></script>
 <script src="/bowl/net.js"></script>
 <script>
 (function () {
   "use strict";
   const $ = (s) => document.querySelector(s);
+  const SB = window.StrikeBowl;
   const scr = { connect: $("#connect"), ctl: $("#ctl") };
   const show = (n) => Object.entries(scr).forEach(([k, el]) => el.classList.toggle("show", k === n));
+  const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 
   let net = null, motionOK = false, swipeMode = false;
+  let mode = "practice", hand = 1, ballId = "solid";
+  let launchBoard = 14, launchAngle = 0;
 
   // ---- connect ----
   const codeIn = $("#codeIn"), connectBtn = $("#connectBtn");
@@ -111,105 +141,96 @@
 
   let pairTimer = null, isPaired = false;
   async function connect() {
-    const code = codeIn.value;
-    if (code.length !== 4) return;
+    const code = codeIn.value; if (code.length !== 4) return;
     connectBtn.disabled = true; $("#cDot").className = "dot wait"; $("#cMsg").textContent = "Connecting…";
-    await requestMotion(); // ask for motion on the tap — iOS only grants it from a user gesture
+    await requestMotion();
     isPaired = false;
-    net = StrikeNet.join(code);
+    net = window.StrikeNet.join(code);
     net.on("paired", () => { isPaired = true; clearTimeout(pairTimer); net.send({ t: "hello", role: "phone" }); startController(); });
     net.on("message", onTvMessage);
     net.on("dropped", () => { $("#gDot").className = "dot off"; $("#gMsg").textContent = "lost the lane"; });
-    net.on("error", () => failConnect("No lane with that code. Check the code on the TV and try again."));
+    net.on("error", () => failConnect("No lane with that code. Check the TV and try again."));
     clearTimeout(pairTimer);
-    pairTimer = setTimeout(() => {
-      if (!isPaired) { try { net.destroy(); } catch (_) {} failConnect("Couldn't reach the lane. Check the code on the TV and make sure the TV page is open, then tap Connect again."); }
-    }, 14000);
+    pairTimer = setTimeout(() => { if (!isPaired) { try { net.destroy(); } catch (_) {} failConnect("Couldn't reach the lane. Check the code on the TV, then tap Connect."); } }, 14000);
   }
-  function failConnect(msg) { $("#cDot").className = "dot off"; $("#cMsg").textContent = msg; connectBtn.disabled = false; }
+  function failConnect(m) { $("#cDot").className = "dot off"; $("#cMsg").textContent = m; connectBtn.disabled = false; }
 
   async function requestMotion() {
-    try {
-      if (typeof DeviceMotionEvent !== "undefined" && typeof DeviceMotionEvent.requestPermission === "function") {
-        motionOK = (await DeviceMotionEvent.requestPermission()) === "granted";
-      } else if (typeof DeviceMotionEvent !== "undefined") { motionOK = true; }
-    } catch (_) { motionOK = false; }
-    try {
-      if (typeof DeviceOrientationEvent !== "undefined" && typeof DeviceOrientationEvent.requestPermission === "function") await DeviceOrientationEvent.requestPermission();
-    } catch (_) {}
+    try { if (typeof DeviceMotionEvent !== "undefined" && typeof DeviceMotionEvent.requestPermission === "function") motionOK = (await DeviceMotionEvent.requestPermission()) === "granted"; else if (typeof DeviceMotionEvent !== "undefined") motionOK = true; } catch (_) { motionOK = false; }
+    try { if (typeof DeviceOrientationEvent !== "undefined" && typeof DeviceOrientationEvent.requestPermission === "function") await DeviceOrientationEvent.requestPermission(); } catch (_) {}
     if (motionOK) { window.addEventListener("devicemotion", onMotion, { passive: true }); window.addEventListener("deviceorientation", onOrient, { passive: true }); }
     else swipeMode = true;
   }
 
   function onTvMessage(d) {
     if (!d || typeof d !== "object") return;
-    if (d.t === "turn") { $("#who").textContent = d.player + " — your turn"; $("#fr").textContent = "Frame " + d.frame + " · Ball " + d.ball; arm(true); }
-    else if (d.t === "rolling") { arm(false); $("#padLabel").textContent = "ROLLING…"; }
-    else if (d.t === "result") { $("#padLabel").textContent = d.gutter ? "GUTTER" : (d.knocked + " down"); }
-    else if (d.t === "gameover") { $("#who").textContent = "🏆 " + d.winner; $("#fr").textContent = "Final — " + d.score; arm(false); $("#padLabel").textContent = "GAME OVER"; }
+    if (d.t === "hello" || d.t === "config") { if (d.mode) setMode(d.mode); }
+    else if (d.t === "turn") { $("#gMsg").textContent = d.player + " · F" + d.frame + " B" + d.ball; }
+    else if (d.t === "rolling") { armSwing(false); $("#padLabel").textContent = "ROLLING…"; }
+    else if (d.t === "grab") { showGrab(true); }
+    else if (d.t === "gameover") { $("#result").innerHTML = "🏆 <b>" + esc(d.winner) + "</b> — " + d.score; showGrab(false); armSwing(false); $("#padLabel").textContent = "GAME OVER"; }
+  }
+  function esc(s) { return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+
+  // ---- controller setup ----
+  function startController() { show("ctl"); buildBalls(); setMode(mode); showGrab(true); }
+  function setMode(m) {
+    mode = m; $("#modeLbl").textContent = m;
+    const slider = m === "practice";
+    $("#sliderLine").hidden = !slider; $("#boardSlider").hidden = !slider; $("#angSlider").hidden = !slider;
+    document.querySelectorAll("#lineBox .lh")[1] && (document.querySelectorAll("#lineBox .lh")[1].hidden = !slider);
+    $("#tiltHint").hidden = slider; $("#tiltBar").hidden = slider;
+    $("#hint").textContent = swipeMode ? "Flick up to bowl — curve it to hook" : "Hold, swing your arm, snap your wrist, let go";
   }
 
-  // ---- controller ---- (motion permission already handled on the Connect tap)
-  function startController() {
-    show("ctl");
-    setupPad();
-    updateModeUI();
+  function buildBalls() {
+    $("#ballPick").innerHTML = SB.BALLS.map((b) => `<div class="ballchip ${b.id === ballId ? "sel" : ""}" data-ball="${b.id}"><div><span class="dot2" style="background:${b.color}"></span><span class="bn">${b.name}</span></div><div class="bt">${b.type}</div></div>`).join("");
+    $("#ballPick").querySelectorAll(".ballchip").forEach((c) => c.addEventListener("click", () => { ballId = c.dataset.ball; $("#ballPick").querySelectorAll(".ballchip").forEach((x) => x.classList.toggle("sel", x === c)); sendSettings(); }));
   }
-  $("#modeBtn").addEventListener("click", () => { swipeMode = !swipeMode; updateModeUI(); });
-  function updateModeUI() {
-    $("#modeBtn").textContent = swipeMode ? "use motion instead" : "use swipe instead";
-    $("#hint").textContent = swipeMode ? "Flick upward to bowl — curve it to hook" : "Hold, swing your arm forward, let go";
-    $("#tip").textContent = swipeMode ? "Start where you aim · flick speed = power" : (motionOK ? "Tilt to aim · twist your wrist to hook" : "Motion unavailable — using swipe");
-  }
+  $("#handBtn").addEventListener("click", () => { hand = -hand; $("#handBtn").textContent = hand > 0 ? "RH" : "LH"; sendSettings(); });
+  function sendSettings() { if (net) net.send({ t: "settings", ballId, hand }); }
 
-  // live sensor state
-  let peakAccel = 0, aimTilt = 0, spinAccum = 0, lastT = 0, armed = false;
+  $("#boardSlider").addEventListener("input", (e) => { launchBoard = +e.target.value; $("#boardVal").textContent = launchBoard; });
+  $("#angSlider").addEventListener("input", (e) => { launchAngle = +e.target.value / 10; $("#angVal").textContent = launchAngle.toFixed(1); });
+
+  // ---- grab / arm ----
+  let armed = false;
+  function showGrab(on) { $("#grabOverlay").classList.toggle("hide", !on); if (on) { armed = false; $("#padLabel").textContent = "GRAB YOUR BALL"; } }
+  $("#grabBtn").addEventListener("click", () => { showGrab(false); armSwing(true); if (navigator.vibrate) navigator.vibrate(10); });
+  function armSwing(on) { armed = on; $("#pad").classList.toggle("armed", on); if (on) { $("#padLabel").textContent = "SWING TO THROW"; setRing(0); $("#mph").textContent = "—"; $("#revInd").textContent = ""; } }
+
+  // ---- motion sampling ----
+  let peakAccel = 0, peakRot = 0, gammaNow = 0;
   function onMotion(e) {
-    const a = e.acceleration && (e.acceleration.x != null) ? e.acceleration : e.accelerationIncludingGravity;
-    if (!a) return;
-    const mag = Math.hypot(a.x || 0, a.y || 0, a.z || 0) - (e.acceleration && e.acceleration.x != null ? 0 : 9.8);
-    if (holding && mag > peakAccel) peakAccel = mag;
-    const rr = e.rotationRate; const now = e.timeStamp || performance.now();
-    if (holding && rr) { const dt = lastT ? (now - lastT) / 1000 : 0.016; spinAccum += (rr.alpha || 0) * dt; }
-    lastT = now;
+    const a = e.acceleration && e.acceleration.x != null ? e.acceleration : e.accelerationIncludingGravity;
+    if (a) { const g0 = (e.acceleration && e.acceleration.x != null) ? 0 : 9.8; const mag = Math.hypot(a.x || 0, a.y || 0, a.z || 0) - g0; if (holding && mag > peakAccel) peakAccel = mag; }
+    const rr = e.rotationRate; if (holding && rr) { const m = Math.max(Math.abs(rr.alpha || 0), Math.abs(rr.gamma || 0)); if (m > peakRot) peakRot = m; }
   }
-  function onOrient(e) { if (holding && e.gamma != null) aimTilt = e.gamma; }
+  function onOrient(e) { gammaNow = e.gamma || 0; if (mode === "game" && !holding) { // tilt to aim
+    launchBoard = Math.round(clamp(20 - (gammaNow / 32) * 18, 2, 38));
+    const t = $("#tiltDot"); if (t) t.style.left = (50 - clamp(gammaNow / 32, -1, 1) * 42) + "%"; } }
 
-  // ---- the throw pad (shared touch handling) ----
+  // ---- swing pad ----
   let holding = false, holdStart = 0, meterRaf = 0, swipe = null;
   const ringFill = $("#ringFill"), CIRC = 326.7;
-  function setRing(p) { ringFill.setAttribute("stroke-dashoffset", CIRC * (1 - p)); $("#pwr").textContent = Math.round(p * 100) + "%"; }
+  function setRing(p) { ringFill.setAttribute("stroke-dashoffset", CIRC * (1 - p)); }
 
-  function arm(on) { armed = on; $("#pad").classList.toggle("armed", on); $("#padLabel").textContent = on ? "HOLD TO AIM · SWING TO THROW" : "WAIT FOR YOUR TURN"; if (!on) setRing(0); }
-
-  function setupPad() {
-    const pad = $("#pad");
-    const xy = (e) => { const t = e.touches ? e.touches[0] : e; const r = pad.getBoundingClientRect(); return { x: (t.clientX - r.left) / r.width, y: (t.clientY - r.top) / r.height, t: performance.now() }; };
-
-    pad.addEventListener("pointerdown", (e) => {
-      if (!armed) return; e.preventDefault();
-      holding = true; holdStart = performance.now(); peakAccel = 0; spinAccum = 0; aimTilt = 0; lastT = 0;
-      swipe = swipeMode ? { start: xy(e), path: [] } : null;
-      meter();
-      if (navigator.vibrate) navigator.vibrate(8);
-    });
-    pad.addEventListener("pointermove", (e) => { if (holding && swipe) swipe.path.push(xy(e)); });
-    pad.addEventListener("pointerup", (e) => { if (holding) release(xy(e)); });
-    pad.addEventListener("pointercancel", () => { if (holding) release(null); });
-    window.addEventListener("pointerup", (e) => { if (holding) release(xy(e)); });
-  }
+  const pad = $("#pad");
+  const xy = (e) => { const t = e.touches ? e.touches[0] : e; const r = pad.getBoundingClientRect(); return { x: (t.clientX - r.left) / r.width, y: (t.clientY - r.top) / r.height, t: performance.now() }; };
+  pad.addEventListener("pointerdown", (e) => { if (!armed) return; e.preventDefault(); holding = true; holdStart = performance.now(); peakAccel = 0; peakRot = 0; swipe = swipeMode ? { s: xy(e), path: [] } : null; meter(); if (navigator.vibrate) navigator.vibrate(6); });
+  pad.addEventListener("pointermove", (e) => { if (holding && swipe) swipe.path.push(xy(e)); });
+  pad.addEventListener("pointerup", (e) => { if (holding) release(xy(e)); });
+  window.addEventListener("pointerup", (e) => { if (holding) release(xy(e)); });
 
   function meter() {
     cancelAnimationFrame(meterRaf);
     const tick = () => {
       if (!holding) return;
       const held = (performance.now() - holdStart) / 1000;
-      const timeP = Math.min(1, held / 1.4) * 0.55;            // builds while you hold/wind up
-      const sensorP = Math.min(1, peakAccel / 26);              // hard swing peak
-      const p = swipeMode ? timeP : Math.max(timeP, sensorP);
-      setRing(p);
-      const sp = swipeMode ? 0 : spinAccum;
-      $("#spinInd").textContent = Math.abs(sp) > 40 ? (sp < 0 ? "◂ hooking left" : "hooking right ▸") : "";
+      // live preview: motion peak so far, or hold-time for swipe
+      const mph = swipeMode ? clamp(12 + held * 3, 12, 20) : clamp(12 + Math.min(1, peakAccel / 26) * 8, 12, 20);
+      setRing((mph - 12) / 8); $("#mph").textContent = mph.toFixed(0);
+      if (!swipeMode) { const rpm = clamp(peakRot * 0.62, 0, 520); $("#revInd").textContent = rpm > 60 ? Math.round(rpm) + " rpm" : ""; }
       meterRaf = requestAnimationFrame(tick);
     };
     meterRaf = requestAnimationFrame(tick);
@@ -218,39 +239,32 @@
   function release(end) {
     holding = false; cancelAnimationFrame(meterRaf);
     if (!armed) { setRing(0); return; }
-    let power, aim, spin;
+    let speedMph, revRate, ang;
     if (swipeMode && swipe && end) {
-      const dt = Math.max(0.05, (end.t - swipe.start.t) / 1000);
-      const dy = swipe.start.y - end.y, dx = end.x - swipe.start.x;
-      power = clamp((dy / dt) * 0.8 + 0.2, 0.15, 1);
-      aim = clamp((swipe.start.x - 0.5) * 1.7, -0.82, 0.82);
-      spin = clamp(dx * 2.4, -0.55, 0.55);
+      const dt = Math.max(0.05, (end.t - swipe.s.t) / 1000); const dy = swipe.s.y - end.y, dx = end.x - swipe.s.x;
+      speedMph = clamp((dy / dt) * 6 + 12.5, 12, 20); revRate = clamp(180 + Math.abs(dx) * 700 + (dx > 0 ? 60 : 0), 60, 520); ang = clamp(dx * 18, -3, 3);
     } else {
-      const held = (performance.now() - holdStart) / 1000;
-      const timeP = Math.min(1, held / 1.4) * 0.5;
-      power = clamp(Math.max(timeP, Math.min(1, peakAccel / 26)), 0.12, 1);
-      aim = clamp((aimTilt / 38) , -0.82, 0.82);         // phone tilt L/R
-      spin = clamp(spinAccum / 320, -0.55, 0.55);        // integrated wrist twist
+      speedMph = clamp(12 + Math.min(1, peakAccel / 26) * 8, 12, 20);
+      revRate = clamp(peakRot * 0.62, 60, 520);
+      ang = mode === "practice" ? launchAngle : clamp((gammaNow / 20), -3, 3);
     }
-    setRing(power);
-    if (net) net.send({ t: "swing", power: power, aim: aim, spin: spin });
-    if (navigator.vibrate) navigator.vibrate([12, 30, 8]);
+    if (mode === "practice") ang = launchAngle;
+    const shot = { t: "shot", ballId, hand, launchBoard, launchAngle: ang, speedMph, revRate };
+    if (net) net.send(shot);
+    setRing((speedMph - 12) / 8); $("#mph").textContent = speedMph.toFixed(0);
+    $("#revInd").textContent = Math.round(revRate) + " rpm";
+    if (navigator.vibrate) navigator.vibrate([14, 28, 8]);
     $("#pad").classList.add("flash"); setTimeout(() => $("#pad").classList.remove("flash"), 400);
-    arm(false);
-    setTimeout(() => setRing(0), 500);
+    armSwing(false); $("#padLabel").textContent = "ROLLING…";
+    $("#result").innerHTML = `${speedMph.toFixed(1)} mph · ${Math.round(revRate)} rpm · board ${launchBoard}`;
   }
 
-  function clamp(v, a, b) { v = +v || 0; return v < a ? a : v > b ? b : v; }
-
-  // play.html#demo : show the swing controller directly (store screenshot + smoke test)
-  if (/demo/.test(location.hash)) {
-    motionOK = true; swipeMode = false;
-    show("ctl"); setupPad(); updateModeUI();
-    $("#who").textContent = "Your turn"; $("#fr").textContent = "Frame 5 · Ball 2";
-    arm(true); setRing(0.61); $("#spinInd").textContent = "hooking right ▸";
-  }
+  $("#swipeToggle").addEventListener("click", () => { swipeMode = !swipeMode; $("#swipeToggle").textContent = swipeMode ? "use motion" : "use swipe"; setMode(mode); });
 
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("/bowl/sw.js").catch(() => {});
+
+  // demo (screenshot)
+  if (/demo/.test(location.hash)) { motionOK = true; show("ctl"); buildBalls(); setMode("practice"); showGrab(false); armSwing(true); setRing(0.55); $("#mph").textContent = "16"; $("#revInd").textContent = "350 rpm"; $("#result").innerHTML = "16.0 mph · 350 rpm · board 14"; }
 })();
 </script>
 </body>
