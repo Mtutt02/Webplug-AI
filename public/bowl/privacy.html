@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>StrikeCast — Privacy</title>
+<meta name="description" content="StrikeCast privacy: no accounts, no tracking, no personal data collected.">
+<meta name="theme-color" content="#0a0c12">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Hanken+Grotesk:wght@400;600;700;800&family=Space+Mono:wght@400;700&display=swap">
+<link rel="stylesheet" href="/bowl/app.css">
+<style>
+  .doc{max-width:640px;margin-inline:auto;padding:32px 0 60px}
+  .doc h1{font-family:var(--fdisp);text-transform:uppercase;font-size:2.4rem;margin-bottom:6px}
+  .doc h2{font-size:1.15rem;margin:28px 0 8px}
+  .doc p,.doc li{color:var(--muted);line-height:1.65}
+  .doc li{margin-bottom:8px}
+  .updated{font-family:var(--fmono);font-size:.72rem;letter-spacing:.12em;color:var(--muted);text-transform:uppercase}
+  a{color:var(--cast)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand"><svg class="logo" viewBox="0 0 30 30"><circle cx="15" cy="15" r="14" fill="none" stroke="#1a2030" stroke-width="2"/><path d="M15 4C11 10 11 20 15 26 19 20 19 10 15 4Z" fill="#f6f1e7"/><circle cx="15" cy="9" r="2.1" fill="#ff5a2c"/></svg>Strike<span class="mk">Cast</span></div>
+  <div class="doc">
+    <h1>Privacy</h1>
+    <p class="updated">Last updated 21 October 2026</p>
+
+    <p>StrikeCast is a game you play in your browser. It is built to need as little
+    of your information as possible — which turns out to be none.</p>
+
+    <h2>What we collect</h2>
+    <p><b>Nothing.</b> StrikeCast has no accounts, no sign-up, and no login. We do
+    not collect, store, sell, or share any personal information. There are no
+    analytics, no advertising, and no third-party trackers or cookies.</p>
+
+    <h2>Your phone's motion</h2>
+    <p>When you use your phone as the controller, the game reads your phone's
+    motion sensors (accelerometer and gyroscope) only while you are holding the
+    throw pad, and only to turn your swing into power, aim, and spin. This happens
+    on your device. The raw sensor readings are never uploaded or stored — only the
+    resulting throw (three numbers) is sent to the screen you paired with.</p>
+
+    <h2>Pairing your phone and the screen</h2>
+    <p>The phone and the TV/iPad connect directly to each other (peer-to-peer) using
+    WebRTC. To introduce the two devices, the game uses PeerJS's public connection
+    broker. Only the temporary room code and the standard connection details needed
+    to open that direct link pass through it — never your name, your motion data, or
+    your gameplay. The link closes when you leave the game.</p>
+
+    <h2>Sound and storage</h2>
+    <p>Game sounds are generated on your device. The app may store a small offline
+    copy of itself in your browser so it opens quickly; that copy stays on your
+    device and contains no personal data.</p>
+
+    <h2>Children</h2>
+    <p>StrikeCast is suitable for all ages and collects no information from anyone,
+    including children.</p>
+
+    <h2>Changes &amp; contact</h2>
+    <p>If this policy changes, the date above will change with it. Questions about
+    privacy? Reach us through <a href="https://webplug.co">webplug.co</a>.</p>
+  </div>
+</div>
+</body>
+</html>
