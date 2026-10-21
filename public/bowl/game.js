@@ -93,7 +93,7 @@
       if (pocket) stats.pocket++;
       if (res.count === 10 && firstBallFresh) stats.strikes++;
       updateTelemetry(r, res, leave, pocket); renderPracticeStats();
-      if (res.count === 10 && firstBallFresh) { toast("STRIKE!", ""); SFX.cheer(); } else if (r.gutter) toast("Gutter", "spare", 900);
+      if (res.count === 10 && firstBallFresh) { toast("STRIKE!", ""); SFX.cheer(); A3D.cheer(); } else if (r.gutter) toast("Gutter", "spare", 900);
       setTimeout(() => { if (mode === "practice") { standing = new Array(10).fill(true); ballReturn(); } }, 1800);
     } else advanceGame(res.count, leave);
     busy = false;
@@ -140,6 +140,9 @@
   }
   function advanceGame(knocked) {
     const fr = players[cur.p].frames[cur.f]; fr.rolls.push(knocked); renderBoard();
+    const rr = fr.rolls, rn = rr.length;
+    if (knocked === 10 && (rn === 1 || cur.f === 9)) { toast("STRIKE!", ""); SFX.cheer(); A3D.cheer(); }
+    else if (rn >= 2 && rr[rn - 2] + rr[rn - 1] === 10 && rr[rn - 2] !== 10) { toast("SPARE", "spare"); SFX.cheer(); A3D.cheer(); }
     const last = cur.f === 9;
     if (!last) { const strike = fr.rolls.length === 1 && fr.rolls[0] === 10; if (strike || fr.rolls.length === 2) nextTurn(); else readyTurn(); }
     else { const r = fr.rolls, n = r.length;
@@ -155,7 +158,7 @@
     renderBoard(); ballReturn();
     if (net) net.send({ t: "turn", player: players[cur.p].name, frame: cur.f + 1, ball: fr.rolls.length + 1 });
   }
-  function endGame() { gameOver = true; const ranked = players.map((p) => ({ name: p.name, score: (computeTotals(p).filter((x) => x != null).pop()) || 0 })).sort((a, b) => b.score - a.score); toast(ranked[0].name + " wins — " + ranked[0].score, "", 4000); SFX.cheer(); if (net) net.send({ t: "gameover", winner: ranked[0].name, score: ranked[0].score }); }
+  function endGame() { gameOver = true; const ranked = players.map((p) => ({ name: p.name, score: (computeTotals(p).filter((x) => x != null).pop()) || 0 })).sort((a, b) => b.score - a.score); toast(ranked[0].name + " wins — " + ranked[0].score, "", 4000); SFX.cheer(); A3D.cheer(); if (net) net.send({ t: "gameover", winner: ranked[0].name, score: ranked[0].score }); }
   function renderBoard() {
     const tb = $("#board"); if (!tb) return;
     let head = "<tr><th class='pname'>Bowler</th>"; for (let f = 1; f <= 10; f++) head += "<th>" + f + "</th>"; head += "</tr>";

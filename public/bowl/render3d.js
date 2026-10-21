@@ -17,6 +17,7 @@
 
   let renderer, scene, cam, ball, pins = [], pinAnim = [], laneMat, raf = 0, lastT = 0;
   let camMode = "ready", camTarget = new T.Vector3(), rollState = null, deliverState = null, returnBall = null;
+  let crowd = null;
 
   // ---- lane texture (wood + boards + arrows + foul line + oil sheen) ----
   function laneTexture() {
@@ -70,23 +71,65 @@
     g.add(maskingUnit(0x0a1024));
     return g;
   }
+  const SKIN = [0x8d5a3c, 0x6b4226, 0xc69a74, 0x9c6b4a, 0x5a3a24, 0xe0b48f, 0x7a4e30, 0xb07c54];
+  const CLOTH = [0x9a3b3b, 0x2f5fae, 0x2f8a55, 0xb8863a, 0x6a3a8a, 0x3a4a6a, 0xb04a6a, 0x3a7a8a, 0xa5a5a5, 0xd0732a];
+  const HAIR = [0x15100c, 0x241a12, 0x0a0a0a, 0x3a2a1a, 0x4a3520, 0x20232a];
+  const pick = (a) => a[(Math.random() * a.length) | 0];
+  // a single low-poly seated person (shoulders, head, hair) — used for the judges
+  function seatedPerson(cloth, skin, hair) {
+    const g = new T.Group();
+    const t = new T.Mesh(new T.CylinderGeometry(0.27, 0.2, 0.62, 10), new T.MeshStandardMaterial({ color: cloth, roughness: 0.8 })); t.position.y = 0.55; t.castShadow = true; g.add(t);
+    const sh = new T.Mesh(new T.SphereGeometry(0.27, 10, 8), new T.MeshStandardMaterial({ color: cloth, roughness: 0.8 })); sh.position.y = 0.82; sh.scale.set(1, 0.5, 0.8); g.add(sh);
+    const h = new T.Mesh(new T.SphereGeometry(0.17, 12, 10), new T.MeshStandardMaterial({ color: skin, roughness: 0.75 })); h.position.y = 1.02; g.add(h);
+    const hr = new T.Mesh(new T.SphereGeometry(0.185, 12, 8), new T.MeshStandardMaterial({ color: hair, roughness: 0.95 })); hr.position.y = 1.07; hr.scale.y = 0.72; g.add(hr);
+    return g;
+  }
+  function textTexture(txt) {
+    const c = document.createElement("canvas"); c.width = 512; c.height = 128; const x = c.getContext("2d");
+    x.fillStyle = "rgba(0,0,0,0)"; x.fillRect(0, 0, 512, 128);
+    x.font = "bold 86px Anton, Arial Narrow, sans-serif"; x.fillStyle = "#32e0cf"; x.textAlign = "center"; x.textBaseline = "middle";
+    x.fillText(txt, 256, 70); const tex = new T.CanvasTexture(c); tex.colorSpace = T.SRGBColorSpace; return tex;
+  }
+  // instanced crowd (torso + head + hair), seated in tiers both sides, with a living bob
   function buildCrowd() {
-    const N = 90, dummy = new T.Object3D();
-    const bodies = new T.InstancedMesh(new T.CapsuleGeometry(0.22, 0.5, 4, 6), new T.MeshStandardMaterial({ roughness: 0.85 }), N);
-    const heads = new T.InstancedMesh(new T.SphereGeometry(0.16, 8, 6), new T.MeshStandardMaterial({ color: 0x8a6b55, roughness: 0.85 }), N);
-    const pal = [0x3a4a6a, 0x6a3a4a, 0x4a6a3a, 0x6a5a3a, 0x444a55, 0x7a4a2a, 0x2a4a5a, 0x5a5a5a];
-    let k = 0;
-    for (const side of [-1, 1]) for (let row = 0; row < 4 && k < N; row++) for (let seat = 0; seat < 12 && k < N; seat++) {
-      const x = side * (8.5 + row * 1.15), z = 9 - seat * 1.5, y = 0.5 + row * 0.75;
-      dummy.position.set(x + (Math.random() - .5) * .3, y, z + (Math.random() - .5) * .3);
-      dummy.rotation.y = side > 0 ? -1.3 : 1.3; dummy.scale.setScalar(0.9 + Math.random() * 0.3); dummy.updateMatrix();
-      bodies.setMatrixAt(k, dummy.matrix); bodies.setColorAt(k, new T.Color(pal[(Math.random() * pal.length) | 0]));
-      dummy.position.y += 0.62 * dummy.scale.y; dummy.updateMatrix(); heads.setMatrixAt(k, dummy.matrix);
-      k++;
+    const seats = [];
+    for (const side of [-1, 1]) for (let row = 0; row < 5; row++) for (let seat = 0; seat < 13; seat++) {
+      if (Math.random() < 0.08) continue;                        // a few empty seats
+      seats.push({ x: side * (8.2 + row * 1.2) + (Math.random() - .5) * .35, y: 0.55 + row * 0.8, z: 10 - seat * 1.5 + (Math.random() - .5) * .35, rot: (side > 0 ? -1.35 : 1.35) + (Math.random() - .5) * .4, s: 1.0 + Math.random() * 0.35, phase: Math.random() * 7 });
     }
-    bodies.count = k; heads.count = k; if (bodies.instanceColor) bodies.instanceColor.needsUpdate = true;
-    scene.add(bodies, heads);
-    for (const side of [-1, 1]) for (let row = 0; row < 4; row++) { const p = new T.Mesh(new T.BoxGeometry(2.4, 0.5, 20), new T.MeshStandardMaterial({ color: 0x14171f, roughness: 0.9 })); p.position.set(side * (8.5 + row * 1.15), row * 0.75, 1); scene.add(p); }
+    const N = seats.length;
+    const torso = new T.InstancedMesh(new T.CylinderGeometry(0.27, 0.2, 0.62, 8), new T.MeshStandardMaterial({ roughness: 0.82 }), N);
+    const head = new T.InstancedMesh(new T.SphereGeometry(0.17, 10, 8), new T.MeshStandardMaterial({ roughness: 0.75 }), N);
+    const hair = new T.InstancedMesh(new T.SphereGeometry(0.185, 10, 7), new T.MeshStandardMaterial({ roughness: 0.95 }), N);
+    torso.castShadow = true;
+    seats.forEach((d, i) => { torso.setColorAt(i, new T.Color(pick(CLOTH))); head.setColorAt(i, new T.Color(pick(SKIN))); hair.setColorAt(i, new T.Color(pick(HAIR))); });
+    crowd = { torso, head, hair, data: seats, excite: 0, d3: new T.Object3D() };
+    updateCrowd(0);
+    scene.add(torso, head, hair);
+    // benches
+    for (const side of [-1, 1]) for (let row = 0; row < 5; row++) { const p = new T.Mesh(new T.BoxGeometry(2.6, 0.5, 21), new T.MeshStandardMaterial({ color: 0x12151d, roughness: 0.9 })); p.position.set(side * (8.2 + row * 1.2), row * 0.8, 1); scene.add(p); }
+  }
+  function updateCrowd(t) {
+    if (!crowd) return; const d3 = crowd.d3;
+    crowd.data.forEach((d, i) => {
+      const bob = Math.sin(t * 2.2 + d.phase) * (0.02 + crowd.excite * 0.45);
+      d3.position.set(d.x, d.y + bob, d.z); d3.rotation.set(0, d.rot, 0); d3.scale.setScalar(d.s); d3.updateMatrix(); crowd.torso.setMatrixAt(i, d3.matrix);
+      d3.position.y += d.s * 0.52; d3.updateMatrix(); crowd.head.setMatrixAt(i, d3.matrix);
+      d3.position.y += d.s * 0.1; d3.updateMatrix(); crowd.hair.setMatrixAt(i, d3.matrix);
+    });
+    crowd.torso.instanceMatrix.needsUpdate = crowd.head.instanceMatrix.needsUpdate = crowd.hair.instanceMatrix.needsUpdate = true;
+    if (crowd.excite > 0) crowd.excite = Math.max(0, crowd.excite - 0.012);
+  }
+  function cheer() { if (crowd) crowd.excite = 1; }
+  // a scorer's / judges' table off to the side of the approach
+  function buildJudges() {
+    const g = new T.Group(); g.position.set(-5.4, 0, 4.2); g.rotation.y = 1.15;
+    const top = new T.Mesh(new T.BoxGeometry(3.6, 0.12, 1.15), new T.MeshStandardMaterial({ color: 0x2a1c10, roughness: 0.5, metalness: 0.1 })); top.position.y = 0.98; top.castShadow = true; g.add(top);
+    const skirt = new T.Mesh(new T.BoxGeometry(3.6, 0.92, 0.06), new T.MeshStandardMaterial({ color: 0x1b2740, emissive: 0x0a1430, emissiveIntensity: 0.4, roughness: 0.6 })); skirt.position.set(0, 0.5, 0.56); g.add(skirt);
+    const sign = new T.Mesh(new T.PlaneGeometry(1.9, 0.48), new T.MeshBasicMaterial({ map: textTexture("JUDGES"), transparent: true })); sign.position.set(0, 0.6, 0.58); g.add(sign);
+    for (const jx of [-1.0, 0, 1.0]) { const j = seatedPerson(pick(CLOTH), pick(SKIN), pick(HAIR)); j.position.set(jx, 0.05, -0.5); j.scale.setScalar(1.15); g.add(j); }
+    for (const mx of [-0.8, 0.8]) { const mon = new T.Mesh(new T.BoxGeometry(0.72, 0.44, 0.05), new T.MeshStandardMaterial({ color: 0x0a0e18, emissive: 0x123a52, emissiveIntensity: 0.7, roughness: 0.3 })); mon.position.set(mx, 1.28, 0.0); mon.rotation.x = -0.22; g.add(mon); }
+    scene.add(g);
   }
   function buildEnv() {
     // concourse / settee floor
@@ -108,6 +151,7 @@
     // back wall behind the gallery
     const back = new T.Mesh(new T.BoxGeometry(70, 11, 0.5), new T.MeshStandardMaterial({ color: 0x0c0f16, roughness: 0.95 })); back.position.set(0, 4.5, 16); scene.add(back);
     buildCrowd();
+    buildJudges();
   }
 
   function init(container) {
@@ -234,6 +278,7 @@
   function loop(ts) {
     raf = requestAnimationFrame(loop);
     const dt = Math.min(0.05, (ts - lastT) / 1000 || 0); lastT = ts;
+    updateCrowd(ts / 1000);
     // ball roll
     if (rollState) {
       rollState.t += dt; const prog = Math.min(1, rollState.t / rollState.dur);
@@ -269,5 +314,5 @@
     renderer.render(scene, cam);
   }
 
-  global.Arena3D = { init, resetRack, setStanding, placeBall, deliverBall, aimBall, rollBall, tumble, showReturn, resize, camSet, PINS };
+  global.Arena3D = { init, resetRack, setStanding, placeBall, deliverBall, aimBall, rollBall, tumble, showReturn, resize, camSet, cheer, PINS };
 })(window);
