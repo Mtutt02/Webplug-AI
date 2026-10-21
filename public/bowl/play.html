@@ -230,7 +230,7 @@
       // live preview: motion peak so far, or hold-time for swipe
       const mph = swipeMode ? clamp(12 + held * 3, 12, 20) : clamp(12 + Math.min(1, peakAccel / 26) * 8, 12, 20);
       setRing((mph - 12) / 8); $("#mph").textContent = mph.toFixed(0);
-      if (!swipeMode) { const rpm = clamp(peakRot * 0.62, 0, 520); $("#revInd").textContent = rpm > 60 ? Math.round(rpm) + " rpm" : ""; }
+      if (!swipeMode) { const rpm = clamp(peakRot > 25 ? 150 + peakRot * 0.95 : 0, 0, 560); $("#revInd").textContent = rpm > 60 ? Math.round(rpm) + " rpm" : ""; }
       meterRaf = requestAnimationFrame(tick);
     };
     meterRaf = requestAnimationFrame(tick);
@@ -244,8 +244,10 @@
       const dt = Math.max(0.05, (end.t - swipe.s.t) / 1000); const dy = swipe.s.y - end.y, dx = end.x - swipe.s.x;
       speedMph = clamp((dy / dt) * 6 + 12.5, 12, 20); revRate = clamp(180 + Math.abs(dx) * 700 + (dx > 0 ? 60 : 0), 60, 520); ang = clamp(dx * 18, -3, 3);
     } else {
-      speedMph = clamp(12 + Math.min(1, peakAccel / 26) * 8, 12, 20);
-      revRate = clamp(peakRot * 0.62, 60, 520);
+      speedMph = clamp(12 + Math.min(1, peakAccel / 24) * 8, 12, 20);
+      // rev rate from wrist rotation: a real pendulum+snap reads plenty; baseline so
+      // any committed swing still hooks, amplified so a wrist snap hooks a lot.
+      revRate = clamp(peakRot > 25 ? 150 + peakRot * 0.95 : 90, 80, 560);
       ang = mode === "practice" ? launchAngle : clamp((gammaNow / 20), -3, 3);
     }
     if (mode === "practice") ang = launchAngle;

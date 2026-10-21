@@ -1,0 +1,213 @@
+/*
+ * StrikeCast — 3D lane renderer (Three.js). View layer only: it draws whatever
+ * the physics engine (balls.js) produces. rollBall() animates along a simulated
+ * path; tumble() topples the pins carry() chose. Camera goes low behind the ball
+ * (ball big in frame), follows it down, then cuts to a pin-cam on impact.
+ */
+(function (global) {
+  const T = global.THREE;
+  const LANE_LEN = 60, LANE_HW = 2.1, BR = 0.46, GUT = 0.5;
+  const PINSCALE = 1.5, PINROW = 1.05;
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const PINS = [
+    { x: 0.00, y: 0 }, { x: -0.17, y: 1 }, { x: 0.17, y: 1 },
+    { x: -0.34, y: 2 }, { x: 0.00, y: 2 }, { x: 0.34, y: 2 },
+    { x: -0.51, y: 3 }, { x: -0.17, y: 3 }, { x: 0.17, y: 3 }, { x: 0.51, y: 3 },
+  ];
+
+  let renderer, scene, cam, ball, pins = [], pinAnim = [], laneMat, raf = 0, lastT = 0;
+  let camMode = "ready", camTarget = new T.Vector3(), rollState = null, deliverState = null, returnBall = null;
+
+  // ---- lane texture (wood + boards + arrows + foul line + oil sheen) ----
+  function laneTexture() {
+    const c = document.createElement("canvas"); c.width = 256; c.height = 2048; const x = c.getContext("2d");
+    const grd = x.createLinearGradient(0, 0, 0, c.height); grd.addColorStop(0, "#e7b265"); grd.addColorStop(1, "#c6893f");
+    x.fillStyle = grd; x.fillRect(0, 0, c.width, c.height);
+    // boards
+    x.strokeStyle = "rgba(120,78,30,.35)"; x.lineWidth = 1;
+    for (let i = 1; i < 39; i++) { const px = i / 39 * c.width; x.beginPath(); x.moveTo(px, 0); x.lineTo(px, c.height); x.stroke(); }
+    // subtle grain
+    x.strokeStyle = "rgba(150,100,45,.10)";
+    for (let i = 0; i < 260; i++) { const px = Math.random() * c.width, len = 40 + Math.random() * 120, py = Math.random() * c.height; x.beginPath(); x.moveTo(px, py); x.lineTo(px, py + len); x.stroke(); }
+    // oil sheen (top ~60% nearer the foul line = bottom of texture)
+    const og = x.createLinearGradient(0, c.height, 0, c.height * 0.4); og.addColorStop(0, "rgba(90,150,210,.12)"); og.addColorStop(1, "rgba(90,150,210,0)");
+    x.fillStyle = og; x.fillRect(0, c.height * 0.4, c.width, c.height * 0.6);
+    // arrows (~15ft from foul => 25% up from bottom)
+    const ay = c.height * 0.76; x.fillStyle = "rgba(95,60,22,.8)";
+    [-.53, -.26, 0, .26, .53].forEach((b) => { const ax = (0.5 - b * 0.5) * c.width; x.beginPath(); x.moveTo(ax, ay - 22); x.lineTo(ax - 10, ay); x.lineTo(ax + 10, ay); x.closePath(); x.fill(); });
+    // foul line (bottom)
+    x.fillStyle = "#b23a1a"; x.fillRect(0, c.height - 8, c.width, 8);
+    const tex = new T.CanvasTexture(c); tex.anisotropy = 4; tex.colorSpace = T.SRGBColorSpace; return tex;
+  }
+
+  function pinGeom() {
+    const pts = [[0.02, 0], [0.19, 0.02], [0.2, 0.12], [0.17, 0.32], [0.1, 0.52], [0.064, 0.64], [0.086, 0.74], [0.11, 0.83], [0.098, 0.96], [0.055, 1.06], [0.03, 1.12]]
+      .map((p) => new T.Vector2(p[0] * PINSCALE, p[1] * PINSCALE));
+    return new T.LatheGeometry(pts, 24);
+  }
+
+  function makePin() {
+    const grp = new T.Group();
+    const body = new T.Mesh(pinGeom(), new T.MeshStandardMaterial({ color: 0xf6f1e7, roughness: 0.5, metalness: 0.05 }));
+    body.castShadow = true; grp.add(body);
+    const ring = new T.Mesh(new T.CylinderGeometry(0.17 * PINSCALE, 0.17 * PINSCALE, 0.07 * PINSCALE, 24, 1, true), new T.MeshStandardMaterial({ color: 0xff5a2c, roughness: 0.5 }));
+    ring.position.y = 0.78 * PINSCALE; grp.add(ring);
+    return grp;
+  }
+
+  function init(container) {
+    renderer = new T.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+    renderer.setPixelRatio(Math.min(2, global.devicePixelRatio || 1));
+    renderer.shadowMap.enabled = true; renderer.shadowMap.type = T.PCFSoftShadowMap;
+    renderer.outputColorSpace = T.SRGBColorSpace;
+    container.appendChild(renderer.domElement);
+
+    scene = new T.Scene(); scene.background = new T.Color(0x06080d); scene.fog = new T.Fog(0x06080d, 40, 95);
+    cam = new T.PerspectiveCamera(55, 1, 0.1, 200);
+
+    scene.add(new T.AmbientLight(0x9fb0d0, 0.55));
+    const key = new T.DirectionalLight(0xfff0e0, 1.1); key.position.set(4, 16, 10); key.castShadow = true;
+    key.shadow.mapSize.set(1024, 1024); key.shadow.camera.left = -8; key.shadow.camera.right = 8; key.shadow.camera.top = 6; key.shadow.camera.bottom = -70; key.shadow.camera.far = 120;
+    scene.add(key);
+    const p1 = new T.PointLight(0xff5a2c, 60, 40); p1.position.set(-6, 9, -5); scene.add(p1);
+    const p2 = new T.PointLight(0x32e0cf, 50, 50); p2.position.set(6, 9, -40); scene.add(p2);
+
+    // lane
+    laneMat = new T.MeshStandardMaterial({ map: laneTexture(), roughness: 0.35, metalness: 0.15 });
+    const lane = new T.Mesh(new T.BoxGeometry(LANE_HW * 2, 0.3, LANE_LEN + 8), laneMat);
+    lane.position.set(0, -0.15, -LANE_LEN / 2 + 1); lane.receiveShadow = true; scene.add(lane);
+    // gutters
+    const gm = new T.MeshStandardMaterial({ color: 0x05070c, roughness: 0.8 });
+    [-1, 1].forEach((s) => { const g = new T.Mesh(new T.BoxGeometry(GUT, 0.5, LANE_LEN + 8), gm); g.position.set(s * (LANE_HW + GUT / 2), -0.35, -LANE_LEN / 2 + 1); scene.add(g); });
+    // pin deck + back wall
+    const deck = new T.Mesh(new T.BoxGeometry(LANE_HW * 2 + GUT * 2, 0.3, 6), new T.MeshStandardMaterial({ color: 0x14202e, roughness: 0.6 }));
+    deck.position.set(0, -0.15, -LANE_LEN - 2.5); deck.receiveShadow = true; scene.add(deck);
+    const wall = new T.Mesh(new T.BoxGeometry(LANE_HW * 2 + GUT * 2, 7, 0.4), new T.MeshStandardMaterial({ color: 0x0b1017, roughness: 0.9 }));
+    wall.position.set(0, 3, -LANE_LEN - 5); scene.add(wall);
+
+    // ball
+    ball = new T.Mesh(new T.SphereGeometry(BR, 40, 40), new T.MeshStandardMaterial({ color: 0xd63c12, roughness: 0.22, metalness: 0.35 }));
+    ball.castShadow = true; ball.position.set(0, BR, 0); scene.add(ball);
+    // finger holes (3 small dark discs)
+    const holeMat = new T.MeshStandardMaterial({ color: 0x05060a, roughness: 0.9 });
+    const holes = new T.Group();
+    [[-0.1, 0.14], [0.1, 0.14], [0, -0.02]].forEach(([hx, hy]) => { const h = new T.Mesh(new T.CircleGeometry(0.055, 16), holeMat); h.position.set(hx, hy, BR - 0.001); holes.add(h); });
+    ball.add(holes);
+
+    // pins
+    for (let i = 0; i < 10; i++) { const pin = makePin(); scene.add(pin); pins.push(pin); }
+    resetRack();
+
+    // ball return rack (right side, near foul line)
+    const rack = new T.Group();
+    const rm = new T.MeshStandardMaterial({ color: 0x171b26, roughness: 0.5, metalness: 0.4 });
+    const base = new T.Mesh(new T.BoxGeometry(1.1, 0.5, 1.6), rm); base.position.set(0, 0.25, 0); rack.add(base);
+    returnBall = new T.Mesh(new T.SphereGeometry(BR * 0.9, 24, 24), new T.MeshStandardMaterial({ color: 0x2a2f3a, roughness: 0.3, metalness: 0.4 }));
+    returnBall.position.set(0, 0.65, 0.2); rack.add(returnBall);
+    rack.position.set(LANE_HW + GUT + 0.9, 0, 1.8); scene.add(rack);
+
+    camSet("ready", 0, true);
+    resize();
+    global.addEventListener("resize", resize);
+    loop();
+  }
+
+  function resetRack() {
+    pinAnim = pins.map(() => null);
+    pins.forEach((pin, i) => { pin.visible = true; pin.position.set(PINS[i].x * LANE_HW, 0, -LANE_LEN - PINS[i].y * PINROW); pin.rotation.set(0, 0, 0); });
+  }
+  function setStanding(standing) { pins.forEach((pin, i) => { if (!standing[i] && !pinAnim[i]) pin.visible = false; }); }
+
+  function placeBall(lx, hex) {
+    ball.material.color.set(hex || 0xd63c12);
+    ball.position.set((lx || 0) * LANE_HW, BR, 0.2); ball.rotation.set(0, 0, 0);
+    camSet("ready", 0, true);
+  }
+
+  // camera presets
+  function camSet(mode, lx, snap) {
+    camMode = mode;
+    let pos, look;
+    if (mode === "ready") { pos = new T.Vector3((lx || 0) * LANE_HW * 0.6, 1.0, 4.2); look = new T.Vector3(0, 0.4, -18); }
+    else if (mode === "pins") { pos = new T.Vector3(0, 2.4, -LANE_LEN + 7); look = new T.Vector3(0, 0.6, -LANE_LEN - 1); }
+    else { pos = new T.Vector3(0, 1.0, 4.2); look = new T.Vector3(0, 0.4, -18); }
+    camTarget.copy(pos); cam.userData.look = look;
+    if (snap) { cam.position.copy(pos); cam.lookAt(look); }
+  }
+
+  function rollBall(path, hex, durSec, onArrive) {
+    ball.material.color.set(hex || 0xd63c12);
+    const pts = path.map((p) => ({ x: p.lx * LANE_HW, z: -p.ly * LANE_LEN }));
+    rollState = { pts, t: 0, dur: durSec || 2.2, onArrive, lastX: pts[0].x, lastZ: 0 };
+    ball.position.set(pts[0].x, BR, pts[0].z);
+    camSet("follow");
+  }
+
+  function tumble(fell, entryLx) {
+    const ex = (entryLx || 0) * LANE_HW;
+    fell.forEach((f, i) => {
+      if (f && pins[i].visible && !pinAnim[i]) {
+        const side = pins[i].position.x < ex ? -1 : 1;
+        pinAnim[i] = { t: 0, ax: (Math.random() - 0.5) * 2, az: side * (0.6 + Math.random()), vx: side * (0.4 + Math.random() * 0.8), vz: -(0.3 + Math.random() * 0.9), spin: (Math.random() - 0.5) * 6 };
+      }
+    });
+    camSet("pins");
+  }
+
+  // deliver a fresh ball: it rolls up the return and over to the foul line (the "grab" moment)
+  function deliverBall(hex, onReady) {
+    ball.material.color.set(hex || 0xd63c12);
+    const from = new T.Vector3(LANE_HW + GUT + 0.6, BR, 2.0);
+    const to = new T.Vector3(0.0, BR, 0.35);
+    ball.position.copy(from); ball.rotation.set(0, 0, 0);
+    deliverState = { from, to, t: 0, dur: 0.95, onReady };
+    camSet("ready", 0);
+  }
+  function showReturn(on) { if (returnBall) returnBall.visible = on !== false; }
+
+  function resize() {
+    if (!renderer) return;
+    const el = renderer.domElement.parentElement; const w = el.clientWidth, h = el.clientHeight;
+    renderer.setSize(w, h, false); cam.aspect = w / Math.max(1, h); cam.updateProjectionMatrix();
+  }
+
+  function loop(ts) {
+    raf = requestAnimationFrame(loop);
+    const dt = Math.min(0.05, (ts - lastT) / 1000 || 0); lastT = ts;
+    // ball roll
+    if (rollState) {
+      rollState.t += dt; const prog = Math.min(1, rollState.t / rollState.dur);
+      const n = rollState.pts.length, fi = prog * (n - 1), i0 = Math.floor(fi), i1 = Math.min(n - 1, i0 + 1), f = fi - i0;
+      const px = lerp(rollState.pts[i0].x, rollState.pts[i1].x, f), pz = lerp(rollState.pts[i0].z, rollState.pts[i1].z, f);
+      const dx = px - rollState.lastX, dz = pz - rollState.lastZ; rollState.lastX = px; rollState.lastZ = pz;
+      ball.position.set(px, BR, pz);
+      ball.rotateOnWorldAxis(new T.Vector3(1, 0, 0), -dz / BR); // roll forward
+      ball.rotateOnWorldAxis(new T.Vector3(0, 0, 1), -dx / BR);
+      if (prog >= 1) { const cb = rollState.onArrive; rollState = null; if (cb) cb(); }
+    }
+    // ball delivery (grab)
+    if (deliverState) {
+      deliverState.t += dt; const p = Math.min(1, deliverState.t / deliverState.dur);
+      const e = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2; // easeInOut
+      const np = deliverState.from.clone().lerp(deliverState.to, e);
+      const dz = np.z - ball.position.z, dx = np.x - ball.position.x;
+      ball.position.copy(np); ball.rotateOnWorldAxis(new T.Vector3(1, 0, 0), -dz / BR); ball.rotateOnWorldAxis(new T.Vector3(0, 0, 1), -dx / BR);
+      if (p >= 1) { const cb = deliverState.onReady; deliverState = null; if (cb) cb(); }
+    }
+    // pin tumble
+    for (let i = 0; i < pins.length; i++) {
+      const a = pinAnim[i]; if (!a) continue;
+      a.t += dt; const pin = pins[i];
+      pin.position.x += a.vx * dt; pin.position.z += a.vz * dt; pin.position.y = Math.max(-1, pin.position.y - a.t * a.t * 2.2 * dt);
+      pin.rotation.x += a.ax * a.spin * 0 + a.ax * dt * 3; pin.rotation.z += a.az * dt * 3;
+      if (a.t > 1.4) { pin.visible = false; pinAnim[i] = null; }
+    }
+    // camera follow / ease
+    if (camMode === "follow" && rollState) { const bz = ball.position.z; camTarget.set(ball.position.x * 0.5, 1.2, bz + 4.5); cam.userData.look = new T.Vector3(ball.position.x * 0.4, 0.3, bz - 10); }
+    cam.position.lerp(camTarget, 0.08);
+    if (cam.userData.look) { const cur = new T.Vector3(); cam.getWorldDirection(cur); const want = cam.userData.look.clone().sub(cam.position).normalize(); const blend = cur.lerp(want, 0.1).add(cam.position); cam.lookAt(blend); }
+    renderer.render(scene, cam);
+  }
+
+  global.Arena3D = { init, resetRack, setStanding, placeBall, deliverBall, rollBall, tumble, showReturn, resize, camSet, PINS };
+})(window);

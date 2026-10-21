@@ -44,7 +44,8 @@
   .who{font-family:var(--fdisp);font-size:1.4rem;text-transform:uppercase}
   .frameno{font-family:var(--fmono);font-size:.76rem;color:var(--muted)}
   .lanewrap{flex:1 1 0;min-height:0;display:flex}
-  canvas{flex:1 1 0;min-width:0;width:100%;display:block}
+  #lane3d{flex:1 1 0;min-width:0;min-height:0;position:relative;overflow:hidden}
+  #lane3d canvas{display:block;width:100%;height:100%}
   .side{width:260px;flex:none;background:#0a0c12;border-left:1px solid var(--ink3);padding:16px;overflow-y:auto}
   .side h3{font-family:var(--fmono);font-size:.7rem;letter-spacing:.2em;text-transform:uppercase;color:var(--cast);margin-bottom:10px}
   .trow{display:flex;justify-content:space-between;align-items:baseline;padding:7px 0;border-bottom:1px solid var(--ink3)}
@@ -129,7 +130,7 @@
     <div class="status"><span class="dot" id="laneDot"></span><span id="laneMsg">controller</span></div>
   </div>
   <div class="lanewrap">
-    <canvas id="lane"></canvas>
+    <div id="lane3d"></div>
     <aside class="side" id="practicePanel">
       <h3>Shot telemetry</h3>
       <div id="telemetry"></div>
@@ -142,7 +143,9 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="/bowl/three.min.js"></script>
 <script src="/bowl/balls.js"></script>
+<script src="/bowl/render3d.js"></script>
 <script src="/bowl/net.js"></script>
 <script src="/bowl/game.js"></script>
 <script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("/bowl/sw.js").catch(() => {});</script>
