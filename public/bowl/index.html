@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>StrikeCast</title>
+<meta name="description" content="Swing your phone like a bowling ball and cast it onto any TV or iPad. No console, no app.">
+<meta name="theme-color" content="#0a0c12">
+<link rel="manifest" href="/bowl/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/bowl/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Hanken+Grotesk:wght@400;600;700;800&family=Space+Mono:wght@400;700&display=swap">
+<link rel="stylesheet" href="/bowl/app.css">
+<style>
+  .hero{flex:1;display:flex;flex-direction:column;justify-content:center;gap:26px}
+  .hero h1{font-family:var(--fdisp);font-weight:400;text-transform:uppercase;line-height:.9;
+    font-size:clamp(2.8rem,13vw,4.2rem)}
+  .hero h1 .ball{color:var(--strike);text-shadow:0 0 40px rgba(255,90,44,.4)}
+  .lead{color:var(--muted);font-size:1.1rem;max-width:30ch}
+  .choices{display:grid;gap:14px}
+  .hint{font-family:var(--fmono);font-size:.72rem;letter-spacing:.1em;color:var(--muted);text-align:center;margin-top:6px}
+  footer{color:var(--muted);font-family:var(--fmono);font-size:.68rem;letter-spacing:.14em;
+    text-transform:uppercase;padding-top:22px;display:flex;justify-content:space-between}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand">
+    <svg class="logo" viewBox="0 0 30 30" aria-hidden="true"><circle cx="15" cy="15" r="14" fill="none" stroke="#1a2030" stroke-width="2"/><path d="M15 4C11 10 11 20 15 26 19 20 19 10 15 4Z" fill="#f6f1e7"/><circle cx="15" cy="9" r="2.1" fill="#ff5a2c"/></svg>
+    Strike<span class="mk">Cast</span>
+  </div>
+
+  <div class="hero">
+    <div>
+      <p class="eyebrow">Motion bowling · no console</p>
+      <h1>Your phone<br>is the <span class="ball">ball.</span></h1>
+    </div>
+    <p class="lead">Swing your phone like you're on the lane. It casts the ball straight onto your TV or iPad — live.</p>
+
+    <div class="choices">
+      <a class="btn cast" href="/bowl/tv.html">📺 &nbsp;Start on this screen (TV / iPad)</a>
+      <a class="btn primary" href="/bowl/play.html">🎳 &nbsp;Use this phone as the controller</a>
+    </div>
+    <p class="hint">Open the TV option on the big screen, then scan the code with your phone.</p>
+  </div>
+
+  <footer><span>StrikeCast</span><span>A Webplug original</span></footer>
+</div>
+<script>
+  if ("serviceWorker" in navigator) navigator.serviceWorker.register("/bowl/sw.js").catch(() => {});
+</script>
+</body>
+</html>
