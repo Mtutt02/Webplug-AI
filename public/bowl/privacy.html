@@ -42,11 +42,12 @@
     resulting throw (three numbers) is sent to the screen you paired with.</p>
 
     <h2>Pairing your phone and the screen</h2>
-    <p>The phone and the TV/iPad connect directly to each other (peer-to-peer) using
-    WebRTC. To introduce the two devices, the game uses PeerJS's public connection
-    broker. Only the temporary room code and the standard connection details needed
-    to open that direct link pass through it — never your name, your motion data, or
-    your gameplay. The link closes when you leave the game.</p>
+    <p>The phone and the TV/iPad find each other through a temporary real-time
+    channel named by the room code shown on screen (powered by Supabase Realtime).
+    Only the room code and the current throw — three numbers describing your swing —
+    pass through it, for as long as you are playing. No account, no name, and no
+    personal information are sent or stored, and the channel closes when you leave
+    the game.</p>
 
     <h2>Sound and storage</h2>
     <p>Game sounds are generated on your device. The app may store a small offline

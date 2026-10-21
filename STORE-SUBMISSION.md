@@ -12,15 +12,15 @@ Fields marked **[you]** need your own details; everything else is filled in.
 
 ## 2. Store page
 - **App name:** `StrikeCast`
-- **One-line subtitle:** `Swing your phone like a bowling ball — it casts to any TV.`
+- **One-line subtitle:** `A real 3-D bowling practice simulator — your phone is the ball.`
 - **Category:** `Games`
 - **Description:**
-  > Your phone is the ball. Swing it like you're on the lane and StrikeCast casts the ball straight onto any TV or iPad — live. No console, no Wiimote, no app to download: open one link on the big screen, scan the code with your phone, and bowl. Real motion physics read your power, aim, and hook, and up to six players can pass the phone around for a full 10-frame game with proper strike-and-spare scoring. Turn the living room into a bowling alley in about ten seconds.
+  > Swing your phone like a real bowling ball and roll it onto any TV or iPad in true 3-D. StrikeCast is a serious bowling simulator with a real skid-hook-roll physics engine: your speed, rev rate, launch board, ball, and the lane's oil pattern all shape the shot — break point, entry angle and pin carry come out of the simulation, just like real lane play. Pick from an arsenal of balls (plastic to strong reactive), practice your line with a full telemetry readout (mph, rpm, board, break point, entry angle, leaves), or play a scored 10-frame game with friends. No console, no download: open one link on the screen, pair your phone, and bowl inside a full 3-D alley.
 - **Top features (up to 4):**
-  1. `Your phone is the controller — swing to bowl, no console needed`
-  2. `Casts to any TV, iPad, or laptop over the web`
-  3. `Real motion physics: power, aim, and hook the pocket`
-  4. `Pass-and-play up to 6 bowlers, full 10-frame scoring`
+  1. `Real hook physics — speed, rev rate, oil pattern and ball all matter`
+  2. `Practice mode with full shot telemetry to groove your line`
+  3. `Your phone is the ball — swing to bowl, cast to any TV or iPad`
+  4. `3-D alley, ball arsenal, 4 oil patterns, scored 10-frame play`
 - **Price:** `Free`
 
 ## 3. You
