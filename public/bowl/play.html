@@ -109,15 +109,36 @@
   connectBtn.addEventListener("click", connect);
   codeIn.addEventListener("keydown", (e) => { if (e.key === "Enter" && !connectBtn.disabled) connect(); });
 
-  function connect() {
+  let pairTimer = null, isPaired = false;
+  async function connect() {
     const code = codeIn.value;
     if (code.length !== 4) return;
     connectBtn.disabled = true; $("#cDot").className = "dot wait"; $("#cMsg").textContent = "Connecting…";
+    await requestMotion(); // ask for motion on the tap — iOS only grants it from a user gesture
+    isPaired = false;
     net = StrikeNet.join(code);
-    net.on("paired", async () => { net.send({ t: "hello", role: "phone" }); await startController(); });
+    net.on("paired", () => { isPaired = true; clearTimeout(pairTimer); net.send({ t: "hello", role: "phone" }); startController(); });
     net.on("message", onTvMessage);
     net.on("dropped", () => { $("#gDot").className = "dot off"; $("#gMsg").textContent = "lost the lane"; });
-    net.on("error", () => { $("#cDot").className = "dot off"; $("#cMsg").textContent = "No lane with that code. Check the TV and retry."; connectBtn.disabled = false; });
+    net.on("error", () => failConnect("No lane with that code. Check the code on the TV and try again."));
+    clearTimeout(pairTimer);
+    pairTimer = setTimeout(() => {
+      if (!isPaired) { try { net.destroy(); } catch (_) {} failConnect("Couldn't reach the lane. Make sure this phone and the TV are on the same Wi-Fi, then tap Connect again."); }
+    }, 14000);
+  }
+  function failConnect(msg) { $("#cDot").className = "dot off"; $("#cMsg").textContent = msg; connectBtn.disabled = false; }
+
+  async function requestMotion() {
+    try {
+      if (typeof DeviceMotionEvent !== "undefined" && typeof DeviceMotionEvent.requestPermission === "function") {
+        motionOK = (await DeviceMotionEvent.requestPermission()) === "granted";
+      } else if (typeof DeviceMotionEvent !== "undefined") { motionOK = true; }
+    } catch (_) { motionOK = false; }
+    try {
+      if (typeof DeviceOrientationEvent !== "undefined" && typeof DeviceOrientationEvent.requestPermission === "function") await DeviceOrientationEvent.requestPermission();
+    } catch (_) {}
+    if (motionOK) { window.addEventListener("devicemotion", onMotion, { passive: true }); window.addEventListener("deviceorientation", onOrient, { passive: true }); }
+    else swipeMode = true;
   }
 
   function onTvMessage(d) {
@@ -128,21 +149,9 @@
     else if (d.t === "gameover") { $("#who").textContent = "🏆 " + d.winner; $("#fr").textContent = "Final — " + d.score; arm(false); $("#padLabel").textContent = "GAME OVER"; }
   }
 
-  // ---- controller ----
-  async function startController() {
+  // ---- controller ---- (motion permission already handled on the Connect tap)
+  function startController() {
     show("ctl");
-    // try motion permission (iOS needs the tap we just had)
-    try {
-      if (typeof DeviceMotionEvent !== "undefined" && typeof DeviceMotionEvent.requestPermission === "function") {
-        const res = await DeviceMotionEvent.requestPermission();
-        motionOK = res === "granted";
-      } else if (typeof DeviceMotionEvent !== "undefined") { motionOK = true; }
-    } catch (_) { motionOK = false; }
-    if (typeof DeviceOrientationEvent !== "undefined" && typeof DeviceOrientationEvent.requestPermission === "function") {
-      try { await DeviceOrientationEvent.requestPermission(); } catch (_) {}
-    }
-    if (motionOK) { window.addEventListener("devicemotion", onMotion, { passive: true }); window.addEventListener("deviceorientation", onOrient, { passive: true }); }
-    else { swipeMode = true; }
     setupPad();
     updateModeUI();
   }

@@ -12,6 +12,20 @@
   const PREFIX = "strikecast-v1-";
   const ALPHABET = "23456789CFGHJMPQRVWX"; // no 0/O/1/I/L, no vowels (no accidental words)
 
+  // ICE: STUN gets most home-router NATs across; TURN relays when the two
+  // devices can't reach each other directly (different networks, or guest-wifi
+  // client isolation). The TURN entries are best-effort free relays — if one is
+  // down the browser just falls back to the next server / to STUN.
+  const ICE = {
+    iceServers: [
+      { urls: "stun:stun.l.google.com:19302" },
+      { urls: "stun:stun1.l.google.com:19302" },
+      { urls: "turn:openrelay.metered.ca:80", username: "openrelayproject", credential: "openrelayproject" },
+      { urls: "turn:openrelay.metered.ca:443", username: "openrelayproject", credential: "openrelayproject" },
+      { urls: "turn:openrelay.metered.ca:443?transport=tcp", username: "openrelayproject", credential: "openrelayproject" },
+    ],
+  };
+
   function newCode() {
     let s = "";
     const r = crypto.getRandomValues(new Uint32Array(4));
@@ -34,7 +48,7 @@
 
     function open() {
       code = newCode();
-      peer = new Peer(PREFIX + code, { debug: 1 });
+      peer = new Peer(PREFIX + code, { debug: 1, config: ICE });
       peer.on("open", () => bus.emit("code", code));
       peer.on("connection", (c) => {
         conn = c;
@@ -66,7 +80,7 @@
   function join(code) {
     const bus = emitter();
     code = (code || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4);
-    const peer = new Peer({ debug: 1 });
+    const peer = new Peer({ debug: 1, config: ICE });
     let conn;
 
     peer.on("open", () => {
