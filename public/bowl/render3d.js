@@ -19,6 +19,8 @@
   let camMode = "ready", camTarget = new T.Vector3(), rollState = null, deliverState = null, returnBall = null;
   let crowd = null, sweep = null, sweepAnim = null, scoreboard = null, pinLight = null, booted = false;
   let reflector = null, rackAnim = null;
+  let trail = null, trailPos = [], flashes = [], shake = 0, exposurePulse = 0;
+  const TRAIL_N = 26;
 
   // ---- planar reflector (real mirror via a render target + mirrored virtual camera) ----
   // compact adaptation of three's examples Reflector, driven by the global THREE, tuned
@@ -193,6 +195,32 @@
     // benches
     for (const side of [-1, 1]) for (let row = 0; row < 5; row++) { const p = new T.Mesh(new T.BoxGeometry(2.6, 0.5, 21), new T.MeshStandardMaterial({ color: 0x12151d, roughness: 0.9 })); p.position.set(side * (8.2 + row * 1.2), row * 0.8, 1); scene.add(p); }
   }
+  function updateTrail(active) {
+    if (active) { trailPos.unshift(new T.Vector3(ball.position.x, BR * 0.42, ball.position.z)); if (trailPos.length > TRAIL_N) trailPos.pop(); }
+    else if (trailPos.length) trailPos.pop();                         // drain the tail after the shot
+    if (!trailPos.length) { trail.visible = false; return; }
+    trail.visible = true;
+    const pos = trail.geometry.attributes.position.array, col = trail.geometry.attributes.color.array, c = ball.material.color;
+    for (let i = 0; i < TRAIL_N; i++) {
+      const p = trailPos[Math.min(i, trailPos.length - 1)];
+      pos[i * 3] = p.x; pos[i * 3 + 1] = p.y; pos[i * 3 + 2] = p.z;
+      const f = (1 - i / TRAIL_N) * 0.9; col[i * 3] = c.r * f; col[i * 3 + 1] = c.g * f; col[i * 3 + 2] = c.b * f;
+    }
+    trail.geometry.attributes.position.needsUpdate = true; trail.geometry.attributes.color.needsUpdate = true;
+  }
+  function updateFx(dt) {
+    // crowd camera flashes
+    for (const f of flashes) {
+      if (f.life <= 0 && !(f.delay > 0)) continue;
+      if (f.delay > 0) { f.delay -= dt; if (f.delay <= 0) f.s.visible = true; continue; }
+      f.life -= dt * 3.2; const k = Math.max(0, f.life / (f.peak || 0.4));
+      f.s.material.opacity = k; f.s.scale.setScalar(0.5 + (1 - k) * 0.9);
+      if (f.life <= 0) { f.s.visible = false; f.s.material.opacity = 0; if (crowd && crowd.excite > 0.35) { f.delay = Math.random() * 0.5; f.life = 0.2 + Math.random() * 0.3; f.peak = f.life; } }
+    }
+    if (shake > 0) shake = Math.max(0, shake - dt * 1.7);
+    if (exposurePulse > 0) exposurePulse = Math.max(0, exposurePulse - dt * 1.3);
+    renderer.toneMappingExposure = 1.08 + exposurePulse * 0.5;
+  }
   function updateCrowd(t) {
     if (!crowd) return; const d3 = crowd.d3;
     const ex = crowd.excite;
@@ -209,7 +237,16 @@
     crowd.torso.instanceMatrix.needsUpdate = crowd.head.instanceMatrix.needsUpdate = crowd.hair.instanceMatrix.needsUpdate = true;
     if (crowd.excite > 0) crowd.excite = Math.max(0, crowd.excite - 0.008);
   }
-  function cheer() { if (crowd) crowd.excite = 1; }
+  function cheer() { if (crowd) crowd.excite = 1; shake = 0.5; exposurePulse = 0.55; triggerFlashes(); }
+  // scatter camera-flash pops through the crowd, like phones going off on a strike
+  function triggerFlashes() {
+    if (!crowd || !flashes.length) return;
+    flashes.forEach((f) => {
+      const d = crowd.data[(Math.random() * crowd.data.length) | 0];
+      f.s.position.set(d.x * 0.82 + (Math.random() - .5) * .6, d.y + 0.95, d.z + 0.5);   // pull toward the aisle so the camera catches them
+      f.delay = Math.random() * 1.0; f.life = 0.16 + Math.random() * 0.26; f.peak = f.life; f.s.visible = false; f.s.material.opacity = 0;
+    });
+  }
   // a scorer's / judges' table off to the side of the approach
   function buildJudges() {
     const g = new T.Group(); g.position.set(-5.4, 0, 4.2); g.rotation.y = 1.15;
@@ -347,6 +384,13 @@
     const holes = new T.Group();
     [[-0.1, 0.14], [0.1, 0.14], [0, -0.02]].forEach(([hx, hy]) => { const h = new T.Mesh(new T.CircleGeometry(0.055, 16), holeMat); h.position.set(hx, hy, BR - 0.001); holes.add(h); });
     ball.add(holes);
+    // oil streak the ball leaves behind as it rolls (a fading comet tail)
+    const tg = new T.BufferGeometry(); tg.setAttribute("position", new T.BufferAttribute(new Float32Array(TRAIL_N * 3), 3));
+    const tcol = new Float32Array(TRAIL_N * 3); tg.setAttribute("color", new T.BufferAttribute(tcol, 3));
+    trail = new T.Line(tg, new T.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.6, blending: T.AdditiveBlending, depthWrite: false }));
+    trail.frustumCulled = false; trail.visible = false; scene.add(trail);
+    // camera-flash pool for the crowd on a strike
+    for (let i = 0; i < 26; i++) { const f = new T.Sprite(new T.SpriteMaterial({ map: glowTexture(), color: 0xffffff, transparent: true, blending: T.AdditiveBlending, depthWrite: false, depthTest: false, opacity: 0 })); f.scale.set(1.5, 1.5, 1); f.renderOrder = 3; f.visible = false; scene.add(f); flashes.push({ s: f, life: 0 }); }
 
     // pins
     for (let i = 0; i < 10; i++) { const pin = makePin(); scene.add(pin); pins.push(pin); }
@@ -403,6 +447,7 @@
   function rollBall(path, hex, durSec, onArrive) {
     ball.material.color.set(hex || 0xd63c12);
     const pts = path.map((p) => ({ x: p.lx * LANE_HW, z: -p.ly * LANE_LEN }));
+    trailPos = [];                               // start a fresh oil streak
     rollState = { pts, t: 0, dur: durSec || 2.2, onArrive, lastX: pts[0].x, lastZ: 0 };
     ball.position.set(pts[0].x, BR, pts[0].z);
     camSet("follow");
@@ -442,6 +487,8 @@
     raf = requestAnimationFrame(loop);
     const dt = Math.min(0.05, (ts - lastT) / 1000 || 0); lastT = ts;
     updateCrowd(ts / 1000);
+    updateTrail(!!rollState);
+    updateFx(dt);
     animateSweep(dt);
     // pinsetter lowering the fresh rack into place
     if (rackAnim) {
@@ -484,6 +531,7 @@
     if (camMode === "follow" && rollState) { const bz = ball.position.z; camTarget.set(ball.position.x * 0.5, 1.2, bz + 4.5); cam.userData.look = new T.Vector3(ball.position.x * 0.4, 0.3, bz - 10); }
     cam.position.lerp(camTarget, 0.08);
     if (cam.userData.look) { const cur = new T.Vector3(); cam.getWorldDirection(cur); const want = cam.userData.look.clone().sub(cam.position).normalize(); const blend = cur.lerp(want, 0.1).add(cam.position); cam.lookAt(blend); }
+    if (shake > 0.001) { cam.position.x += (Math.random() - .5) * shake * 0.45; cam.position.y += (Math.random() - .5) * shake * 0.3; }
     renderer.render(scene, cam);
   }
 
