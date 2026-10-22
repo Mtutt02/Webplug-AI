@@ -49,8 +49,10 @@
     <h1>Punch in the code</h1>
     <p class="muted" style="margin:0;max-width:32ch">Open this on a laptop or a propped-up phone that can <b>see your throwing hand</b>. No phone to hold — your hand is the ball. Code's on the TV.</p>
     <div class="codein"><input id="codeIn" inputmode="latin" autocapitalize="characters" maxlength="4" placeholder="····"></div>
-    <div class="status center"><span class="dot" id="cDot"></span><span id="cMsg">Waiting for a code</span></div>
+    <div class="status center"><span class="dot" id="cDot"></span><span id="cMsg">Waiting on the code</span></div>
     <button class="btn cast" id="connectBtn" disabled>Connect &amp; start camera</button>
+    <button class="btn ghost" id="soloBtn" style="margin-top:2px">Just turn the camera on (no TV)</button>
+    <p class="muted" style="margin:0;font-size:.74rem">Test your hand first — grant the camera and watch it read your grip and swing.</p>
   </div>
 </section>
 
@@ -105,6 +107,7 @@
   codeIn.addEventListener("input", () => { codeIn.value = codeIn.value.toUpperCase().replace(/[^A-Z0-9]/g, ""); connectBtn.disabled = codeIn.value.length !== 4; });
   if (fromHash.length === 4) { codeIn.value = fromHash; connectBtn.disabled = false; }
   connectBtn.addEventListener("click", start);
+  $("#soloBtn").addEventListener("click", async () => { $("#soloBtn").disabled = true; await startCamera(); });   // test with no TV — camera prompts, tracking runs, nothing sent
 
   function start() {
     const code = codeIn.value; if (code.length !== 4) return;
