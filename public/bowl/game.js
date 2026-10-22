@@ -51,20 +51,31 @@
   $("#optGo") && $("#optGo").addEventListener("click", () => { SFX.resume(); openLane(); });
 
   // ---------------------------------------------------------------- pairing
+  let pairCode = null, ctlMode = "phone";                 // phone controller vs hand/camera
+  function renderPair() {
+    const base = location.origin + (ctlMode === "camera" ? "/bowl/camera" : "/bowl/play");
+    $("#pairEyebrow").textContent = ctlMode === "camera" ? "Scan on a laptop or propped phone that sees your hand" : "Scan it — your phone's the ball now";
+    $("#joinHost").textContent = base.replace(/^https?:\/\//, "");
+    $("#pairHelp").textContent = ctlMode === "camera"
+      ? "No phone to hold — open it where a camera can see your throwing hand, then bowl a real swing: fist to grab, flick open to let go."
+      : "Swing your phone like the ball — tilt to aim, flick your wrist to hook.";
+    $("#qr").innerHTML = "";
+    if (pairCode) { try { new QRCode($("#qr"), { text: base + "#" + pairCode, width: 168, height: 168, colorDark: "#0a0c12", colorLight: "#fff", correctLevel: QRCode.CorrectLevel.M }); } catch (_) {} }
+  }
+  document.querySelectorAll("#ctlPick [data-ctl]").forEach((b) => b.addEventListener("click", () => {
+    ctlMode = b.dataset.ctl; document.querySelectorAll("#ctlPick button").forEach((x) => x.classList.toggle("sel", x === b)); renderPair();
+  }));
   function openLane() {
     show("pair");
-    const joinBase = location.origin + "/bowl/play.html";
     net = window.StrikeNet ? window.StrikeNet.host() : null;
     if (!net) { startLane(); return; }
     net.on("code", (code) => {
-      $("#codeOut").textContent = code; $("#joinHost").textContent = joinBase.replace(/^https?:\/\//, "");
-      const camHost = $("#camHost"); if (camHost) camHost.textContent = (location.origin + "/bowl/camera").replace(/^https?:\/\//, "");
-      $("#qr").innerHTML = ""; try { new QRCode($("#qr"), { text: joinBase + "#" + code, width: 168, height: 168, colorDark: "#0a0c12", colorLight: "#fff", correctLevel: QRCode.CorrectLevel.M }); } catch (_) {}
-      $("#pairDot").className = "dot wait"; $("#pairMsg").textContent = "Grab your phone — that's the ball";
+      pairCode = code; $("#codeOut").textContent = code; renderPair();
+      $("#pairDot").className = "dot wait"; $("#pairMsg").textContent = "Pick your controller, then join on " + (ctlMode === "camera" ? "that device" : "your phone");
     });
     net.on("paired", () => { net.send({ t: "hello", role: "tv", mode: mode, oil: oilId }); startLane(); });
     net.on("message", onPhoneMessage);
-    net.on("dropped", () => setStatus("off", "lost the phone"));
+    net.on("dropped", () => setStatus("off", "lost the controller"));
     net.on("error", () => { $("#pairDot").className = "dot off"; $("#pairMsg").textContent = "Couldn't reach the lane. Throw solo instead?"; });
   }
   $("#backHome2") && $("#backHome2").addEventListener("click", () => { if (net) net.destroy(); net = null; show("opt"); });

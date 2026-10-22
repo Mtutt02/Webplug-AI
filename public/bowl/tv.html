@@ -109,12 +109,16 @@
 <!-- PAIR -->
 <section id="pair" class="screen">
   <div class="panel card col center">
-    <p class="eyebrow">Scan it — your phone's the ball now</p>
+    <div class="pickrow" id="ctlPick" style="justify-content:center;margin-bottom:2px">
+      <button data-ctl="phone" class="sel">📱 Phone is the ball</button>
+      <button data-ctl="camera">🎥 Use your hand (camera)</button>
+    </div>
+    <p class="eyebrow" id="pairEyebrow">Scan it — your phone's the ball now</p>
     <div class="qrbox"><div id="qr"></div></div>
     <p class="muted" style="margin:0">or go to <b id="joinHost"></b> and enter</p>
     <div class="code" id="codeOut">····</div>
     <div class="status"><span class="dot wait" id="pairDot"></span><span id="pairMsg">Oiling the lane…</span></div>
-    <p class="muted" style="margin:0;font-size:.8rem;max-width:40ch">🎥 <b>Camera control (beta):</b> open <b id="camHost"></b> on a laptop or propped-up phone that can see your whole body, and enter the code to control it by stepping &amp; swinging.</p>
+    <p class="muted" id="pairHelp" style="margin:0;font-size:.8rem;max-width:42ch">Swing your phone like the ball — tilt to aim, flick your wrist to hook.</p>
     <div class="row"><button class="btn ghost" id="backHome2">← Back</button><button class="btn primary" id="skipPair">Just let me throw</button></div>
   </div>
 </section>
