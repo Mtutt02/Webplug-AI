@@ -129,8 +129,8 @@
 
   let net = null, motionOK = false, swipeMode = false;
   let mode = "practice", hand = 1, ballId = "solid";
-  let launchBoard = 20, launchAngle = 0;   // launchBoard is locked from the stance at swing-start
-  let stanceBoard = 20, gammaCenter = null, stanceSendT = 0;
+  let launchBoard = 20, launchAngle = 0;   // launchBoard is locked from the stance when you grab the ball
+  let stanceBoard = 20, gammaCenter = null, stanceSendT = 0, aimLocked = false;
 
   // ---- connect ----
   const codeIn = $("#codeIn"), connectBtn = $("#connectBtn");
@@ -197,11 +197,17 @@
 
   // ---- grab / arm ----
   let armed = false;
-  function showGrab(on) { $("#grabOverlay").classList.toggle("hide", !on); if (on) { armed = false; recenterStance(); $("#padLabel").textContent = "GRAB YOUR BALL"; } }
+  function showGrab(on) { $("#grabOverlay").classList.toggle("hide", !on); if (on) { armed = false; aimLocked = false; recenterStance(); $("#padLabel").textContent = "GRAB YOUR BALL"; } }
   $("#grabBtn").addEventListener("click", () => { showGrab(false); armSwing(true); if (navigator.vibrate) navigator.vibrate(10); });
   function armSwing(on) {
     armed = on; swinging = false; postLow = 0; $("#pad").classList.toggle("armed", on);
-    if (on) { lastFireT = performance.now(); $("#padLabel").textContent = swipeMode ? "FLICK TO THROW" : "SWING TO THROW"; setRing(0); $("#mph").textContent = "—"; $("#revInd").textContent = ""; }
+    if (on) {
+      launchBoard = stanceBoard; aimLocked = true;   // grabbing the ball LOCKS your spot — tilt no longer moves it
+      lastFireT = performance.now();
+      $("#padLabel").textContent = swipeMode ? "FLICK TO THROW" : "SPOT LOCKED · SWING";
+      $("#tiltHint") && ($("#tiltHint").textContent = "Spot locked on board " + launchBoard + " — now swing");
+      setRing(0); $("#mph").textContent = "—"; $("#revInd").textContent = "";
+    }
   }
 
   // ---- motion: detect a REAL bowling swing, hands-free ----
@@ -291,7 +297,7 @@
   // tilt the phone left/right to set WHERE YOU STAND (relative to however you hold it)
   function onOrient(e) {
     gammaNow = e.gamma || 0;
-    if (swinging) return;                                   // stance is frozen the moment you start to swing
+    if (swinging || aimLocked) return;                      // once you grab the ball, your spot is frozen
     if (gammaCenter == null) gammaCenter = gammaNow;
     const d = gammaNow - gammaCenter;
     stanceBoard = Math.round(clamp(20 - (d / 26) * 18, 2, 38));

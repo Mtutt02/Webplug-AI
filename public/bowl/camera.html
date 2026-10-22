@@ -184,7 +184,7 @@
         $("#rStance").textContent = "board " + stanceBoard;
         if (net && now - lastStanceSent > 90) { lastStanceSent = now; net.send({ t: "stance", board: stanceBoard }); }
       }
-      if (grip) { state = "hold"; peakVy = 0; gripAngle = angle; aimAtGrip = stanceBoard; }
+      if (grip) { state = "hold"; peakVy = 0; gripAngle = angle; aimAtGrip = stanceBoard; $("#rStance").textContent = "board " + aimAtGrip + " 🔒"; }
     } else {                                                   // "hold" — ball is in your fist
       $("#rArm").textContent = "ball in hand";
       $("#rState").textContent = "swing & open to throw";
