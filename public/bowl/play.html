@@ -260,7 +260,7 @@
     // live feedback on the ring while you swing
     const mphLive = clamp(12 + Math.min(1, peakAccel / ACCEL_FULL) * 8, 12, 20);
     setRing((mphLive - 12) / 8); $("#mph").textContent = mphLive.toFixed(0);
-    const rpmLive = clamp(peakRot > 40 ? 120 + peakRot * 0.8 : 0, 0, 600); $("#revInd").textContent = rpmLive > 60 ? Math.round(rpmLive) + " rpm" : "";
+    const rpmLive = clamp(Math.round(peakRot / 6 * 0.7), 0, 600); $("#revInd").textContent = rpmLive > 60 ? rpmLive + " rpm" : "";
     // release = the arc collapses after a committed peak (the ball has left your hand)
     const strong = peakAccel > FIRE_MIN;
     if (strong && mag < peakAccel * 0.4) postLow++; else postLow = 0;
@@ -272,8 +272,9 @@
   function fireSwing() {
     swinging = false; lastFireT = performance.now();
     const speedMph = clamp(12 + Math.min(1, peakAccel / ACCEL_FULL) * 8, 12, 20);
-    // revs from the wrist curl at release. the physics hooks toward your hand; how far depends on revs.
-    const revRate = clamp(peakRot > 40 ? 120 + peakRot * 0.8 : 95, 80, 600);
+    // revs come from the wrist FLICK at release (docs/bowling-swing-mechanics.md §5A):
+    // rpm = (deg/s) ÷ 6, and the hand over-reads the ball's spin, so × ~0.7. A real flick hooks; a dead swing doesn't.
+    const revRate = clamp(Math.round(peakRot / 6 * 0.7), 85, 600);
     // small steer from the swing's sideways drift; scatter only when the swing was weak/uncommitted
     const commit = clamp(Math.min(1, peakAccel / 20) * 0.6 + Math.min(1, peakRot / 420) * 0.4, 0, 1);
     const scatter = 2.0 * (1 - commit);

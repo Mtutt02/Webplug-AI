@@ -93,10 +93,10 @@
   // ---- tunables (easy to dial on a real device) ----
   const K = {
     AIM_RANGE: 0.42,        // how far your open hand sweeps across the frame = the whole lane
-    FIST: 1.5,              // hand "openness" below this = a fist (you've grabbed the ball)
-    OPEN: 1.85,             // above this = hand open (you let go)
-    SWING_V: 0.8,           // downward hand speed (frame-heights/sec) that counts as a real swing
-    HARD_V: 2.3,            // a fast enough pass fires even if the open-hand read is missed
+    FIST: 0.70,             // mean finger curl (fingertip→knuckle ÷ hand size) below this = a fist (ball held)
+    OPEN: 1.00,             // above this = fingers extended (you let go)
+    SWING_SPEED: 0.9,       // peak hand speed (frame-heights/sec) that counts as a real swing
+    REV_K: 3.4,             // degrees of wrist turn through release → revs
     MIN_MPH: 12, MAX_MPH: 20,
     COOLDOWN: 1200,         // ms between throws
   };
@@ -145,12 +145,15 @@
         runningMode: "VIDEO", numHands: 1,
       });
     } catch (e) { $("#camStatus").textContent = "Couldn't load the hand tracker (network?)."; return; }
-    camRunning = true; $("#camStatus").textContent = "Open hand = aim · make a fist to grab the ball · swing down & open to throw";
+    camRunning = true; $("#camStatus").textContent = "Open hand = aim · fist = grab the ball · swing & flick your fingers open to let go";
     requestAnimationFrame(loop);
   }
 
-  // gesture state machine: aim (open hand) → hold (fist) → release (open at the bottom of a swing)
-  let state = "aim", peakVy = 0, gripAngle = 0, aimAtGrip = 20, hist = [], smoothOpen = 1.9;
+  // gesture state machine: aim (open hand) → hold (fist) → release (fingers fling open at the bottom)
+  // the release is the fingers OPENING — like the ball rolling off them — with a wrist turn for revs,
+  // not a downward chop (docs/bowling-swing-mechanics.md §5B).
+  let state = "aim", peakSpeed = 0, gripTheta = 0, aimAtGrip = 20, hist = [], smoothGrip = 1.1;
+  const DEG = 180 / Math.PI;
   function loop() {
     if (!camRunning) return;
     requestAnimationFrame(loop);
@@ -163,43 +166,46 @@
     const lm = res.landmarks[0];
     drawHand(lm);
 
-    // hand metrics: openness (fingertip spread ÷ hand size), angle (wrist→middle knuckle), speed
-    const wrist = lm[0], mcp = lm[9];
-    const size = Math.hypot(mcp.x - wrist.x, mcp.y - wrist.y) || 0.001;
-    const spread = [8, 12, 16, 20].reduce((s, i) => s + Math.hypot(lm[i].x - wrist.x, lm[i].y - wrist.y), 0) / 4 / size;
-    smoothOpen = smoothOpen * 0.55 + spread * 0.45;
+    // grip: mean fingertip→knuckle distance ÷ hand size (small = curled fist, large = open hand)
+    const wrist = lm[0], mcp9 = lm[9];
+    const S = Math.hypot(mcp9.x - wrist.x, mcp9.y - wrist.y) || 0.001;
+    let gs = 0; for (const [tip, mcp] of [[8, 5], [12, 9], [16, 13], [20, 17]]) gs += Math.hypot(lm[tip].x - lm[mcp].x, lm[tip].y - lm[mcp].y);
+    gs = gs / 4 / S; smoothGrip = smoothGrip * 0.5 + gs * 0.5;
+    const grip = smoothGrip < K.FIST, open = smoothGrip > K.OPEN;
     const hx = 1 - wrist.x;                                     // camera mirrored → flip for aim
-    const angle = Math.atan2(mcp.y - wrist.y, mcp.x - wrist.x);
-    hist.push({ y: wrist.y, x: hx, t: now }); if (hist.length > 6) hist.shift();
-    let vy = 0; if (hist.length >= 2) { const a = hist[0], b = hist[hist.length - 1]; vy = (b.y - a.y) / Math.max(0.001, (b.t - a.t) / 1000); }
-    const grip = smoothOpen < K.FIST, open = smoothOpen > K.OPEN;
+    // palm roll across the knuckles (index-MCP 5 → pinky-MCP 17): sweeps as the wrist turns through release
+    const theta = Math.atan2(lm[17].y - lm[5].y, lm[17].x - lm[5].x);
+    // peak hand speed over the swing (any direction — the release finishes forward & up)
+    hist.push({ x: hx, y: wrist.y, t: now }); if (hist.length > 6) hist.shift();
+    let speed = 0; if (hist.length >= 2) { const a = hist[0], b = hist[hist.length - 1]; speed = Math.hypot(b.x - a.x, b.y - a.y) / Math.max(0.001, (b.t - a.t) / 1000); }
 
     if (state === "aim") {
       $("#rArm").textContent = grip ? "grabbing" : "open";
       $("#rState").textContent = "aim — move your hand";
       if (aimBase == null) aimBase = hx;
-      if (!grip) {                                             // steer the stance with your open hand
+      if (open) {                                              // steer the stance with your open hand
         const off = (hx - aimBase) / K.AIM_RANGE;
         stanceBoard = Math.round(clamp(20 - off * 18, 2, 38));
         $("#rStance").textContent = "board " + stanceBoard;
         if (net && now - lastStanceSent > 90) { lastStanceSent = now; net.send({ t: "stance", board: stanceBoard }); }
       }
-      if (grip) { state = "hold"; peakVy = 0; gripAngle = angle; aimAtGrip = stanceBoard; $("#rStance").textContent = "board " + aimAtGrip + " 🔒"; }
+      if (grip) { state = "hold"; peakSpeed = 0; gripTheta = theta; aimAtGrip = stanceBoard; $("#rStance").textContent = "board " + aimAtGrip + " 🔒"; }
     } else {                                                   // "hold" — ball is in your fist
       $("#rArm").textContent = "ball in hand";
-      $("#rState").textContent = "swing & open to throw";
-      if (vy > peakVy) peakVy = vy;
-      const rotDelta = Math.abs(angle - gripAngle);
-      const released = now - lastThrow > K.COOLDOWN && ((open && peakVy > K.SWING_V) || vy > K.HARD_V);
-      if (released) {
+      $("#rState").textContent = "swing & flick open to throw";
+      if (speed > peakSpeed) peakSpeed = speed;
+      // RELEASE = fingers fling open after a real swing
+      if (now - lastThrow > K.COOLDOWN && open && peakSpeed > K.SWING_SPEED) {
         lastThrow = now;
-        const speed = clamp(K.MIN_MPH + (peakVy - K.SWING_V) * 5, K.MIN_MPH, K.MAX_MPH);
-        const rev = clamp(150 + rotDelta * 260 + peakVy * 40, 110, 560);  // curl of the wrist = revs
+        let dTheta = theta - gripTheta; while (dTheta > Math.PI) dTheta -= 2 * Math.PI; while (dTheta < -Math.PI) dTheta += 2 * Math.PI;
+        const turnDeg = Math.abs(dTheta) * DEG;                // how far the wrist turned through release
+        const speedMph = clamp(K.MIN_MPH + (peakSpeed - K.SWING_SPEED) * 4.5, K.MIN_MPH, K.MAX_MPH);
+        const rev = clamp(Math.round(100 + turnDeg * K.REV_K), 90, 560);   // the turn = the revs
         const drift = hist.length ? (hx - hist[0].x) : 0;
-        const ang = clamp(drift * 12 * -hand, -4, 4);
-        throwShot(speed, rev, ang, aimAtGrip);
-        state = "aim"; aimBase = hx;                           // re-center aim where the hand finished
-      } else if (open && peakVy <= K.SWING_V) { state = "aim"; }  // opened without swinging — put it back
+        const ang = clamp(drift * 12 * -hand, -4, 4);          // small steer; hook direction follows your hand
+        throwShot(speedMph, rev, ang, aimAtGrip);
+        state = "aim"; aimBase = hx;
+      } else if (open && peakSpeed <= K.SWING_SPEED) { state = "aim"; }     // opened without swinging — put it back
     }
   }
 

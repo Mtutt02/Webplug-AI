@@ -124,12 +124,25 @@
   function setGrab(on) { setStatus(on ? "wait" : "on", on ? "grab your ball" : "rolling…"); }
 
   // ---------------------------------------------------------------- telemetry (practice)
+  // style bands + a coach cue, grounded in docs/bowling-swing-mechanics.md §3/§6
+  function coach(speed, rev) {
+    const ratio = rev / Math.max(1, speed);
+    const style = rev < 200 ? "Soft roll" : rev < 300 ? "Stroker" : rev < 400 ? "Tweener" : "Cranker";
+    let cue;
+    if (rev < 200) cue = "Lift up through the ball — flick your fingers at the bottom for more revs.";
+    else if (ratio > 25) cue = "Rev-dominant — a touch more speed would match your hook.";
+    else if (ratio < 20) cue = "Speed-dominant — ease off a hair or add lift for more hook.";
+    else cue = "Balanced release — speed and revs are matched. Stay with it.";
+    return { style, cue };
+  }
   function updateTelemetry(r, res, leave, pocket) {
     const pins = r.gutter ? "In the ditch" : (res.count === 10 ? "Flush — all ten" : (leave.length ? "left the " + leave.join("-") : (res.count + " down")));
-    const rows = [["Ball speed", r.speedMph.toFixed(1) + " mph"], ["Rev rate", Math.round(r.revRate) + " rpm"], ["Launch", "board " + r.launchBoard],
+    const c = coach(r.speedMph, r.revRate);
+    const rows = [["Ball speed", r.speedMph.toFixed(1) + " mph"], ["Rev rate", Math.round(r.revRate) + " rpm"], ["Style", r.gutter ? "—" : c.style], ["Launch", "board " + r.launchBoard],
       ["Break point", r.gutter ? "—" : ("board " + r.breakBoard + " @ " + r.breakFeet + "ft")], ["Entry board", r.gutter ? "gutter" : ("board " + r.entryBoard + (pocket ? " ✓ pocket" : ""))],
       ["Entry angle", r.gutter ? "—" : (r.entryAngle.toFixed(1) + "°")], ["Result", pins]];
-    $("#telemetry").innerHTML = rows.map(([k, v]) => `<div class="trow"><span class="tk">${k}</span><span class="tv ${k === 'Result' ? 'res' : ''}">${esc(v)}</span></div>`).join("");
+    $("#telemetry").innerHTML = rows.map(([k, v]) => `<div class="trow"><span class="tk">${k}</span><span class="tv ${k === 'Result' ? 'res' : ''}">${esc(v)}</span></div>`).join("")
+      + (r.gutter ? "" : `<div class="coach">${esc(c.cue)}</div>`);
   }
   function renderPracticeStats() {
     const s = stats; if (!s.shots) return;
