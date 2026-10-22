@@ -17,7 +17,23 @@
 
   let renderer, scene, cam, ball, pins = [], pinAnim = [], laneMat, raf = 0, lastT = 0;
   let camMode = "ready", camTarget = new T.Vector3(), rollState = null, deliverState = null, returnBall = null;
-  let crowd = null;
+  let crowd = null, sweep = null, sweepAnim = null, scoreboard = null, pinLight = null, booted = false;
+
+  // ---- radial glow sprite (fake bloom around lights / neon, no post-processing) ----
+  let _glowTex = null;
+  function glowTexture() {
+    if (_glowTex) return _glowTex;
+    const c = document.createElement("canvas"); c.width = c.height = 128; const x = c.getContext("2d");
+    const g = x.createRadialGradient(64, 64, 0, 64, 64, 64);
+    g.addColorStop(0, "rgba(255,255,255,1)"); g.addColorStop(0.25, "rgba(255,255,255,.55)");
+    g.addColorStop(0.55, "rgba(255,255,255,.14)"); g.addColorStop(1, "rgba(255,255,255,0)");
+    x.fillStyle = g; x.fillRect(0, 0, 128, 128);
+    _glowTex = new T.CanvasTexture(c); return _glowTex;
+  }
+  function addGlow(pos, color, size, parent) {
+    const s = new T.Sprite(new T.SpriteMaterial({ map: glowTexture(), color, transparent: true, blending: T.AdditiveBlending, depthWrite: false, opacity: 0.9 }));
+    s.scale.set(size, size, 1); s.position.copy(pos); (parent || scene).add(s); return s;
+  }
 
   // ---- lane texture (wood + boards + arrows + foul line + oil sheen) ----
   function laneTexture() {
@@ -41,18 +57,36 @@
     const tex = new T.CanvasTexture(c); tex.anisotropy = 4; tex.colorSpace = T.SRGBColorSpace; return tex;
   }
 
+  // ball surface: near-white base (so the per-ball tint shows) with a low-contrast marble swirl
+  function ballSwirl() {
+    const c = document.createElement("canvas"); c.width = c.height = 256; const x = c.getContext("2d");
+    x.fillStyle = "#efe9e2"; x.fillRect(0, 0, 256, 256);
+    for (let i = 0; i < 10; i++) {
+      x.strokeStyle = i % 2 ? "rgba(255,255,255,.5)" : "rgba(60,40,30,.22)"; x.lineWidth = 6 + Math.random() * 16;
+      x.beginPath();
+      for (let a = 0; a <= 1; a += 0.05) { const px = a * 256, py = 128 + Math.sin(a * 6 + i) * (30 + i * 6) + (i - 5) * 10; a === 0 ? x.moveTo(px, py) : x.lineTo(px, py); }
+      x.stroke();
+    }
+    const tex = new T.CanvasTexture(c); tex.wrapS = tex.wrapT = T.RepeatWrapping; return tex;
+  }
+
   function pinGeom() {
     const pts = [[0.02, 0], [0.19, 0.02], [0.2, 0.12], [0.17, 0.32], [0.1, 0.52], [0.064, 0.64], [0.086, 0.74], [0.11, 0.83], [0.098, 0.96], [0.055, 1.06], [0.03, 1.12]]
       .map((p) => new T.Vector2(p[0] * PINSCALE, p[1] * PINSCALE));
     return new T.LatheGeometry(pts, 24);
   }
 
+  const pinWhiteMat = new T.MeshStandardMaterial({ color: 0xfbf7ee, roughness: 0.32, metalness: 0.0 });
+  const pinBandMat = new T.MeshStandardMaterial({ color: 0xff5a2c, roughness: 0.34, metalness: 0.0 });
   function makePin() {
     const grp = new T.Group();
-    const body = new T.Mesh(pinGeom(), new T.MeshStandardMaterial({ color: 0xf6f1e7, roughness: 0.5, metalness: 0.05 }));
+    const body = new T.Mesh(pinGeom(), pinWhiteMat);
     body.castShadow = true; grp.add(body);
-    const ring = new T.Mesh(new T.CylinderGeometry(0.17 * PINSCALE, 0.17 * PINSCALE, 0.07 * PINSCALE, 24, 1, true), new T.MeshStandardMaterial({ color: 0xff5a2c, roughness: 0.5 }));
-    ring.position.y = 0.78 * PINSCALE; grp.add(ring);
+    // two collar stripes on the neck, like a real pin
+    [[0.90, 0.108], [0.98, 0.095]].forEach(([yy, rr]) => {
+      const ring = new T.Mesh(new T.CylinderGeometry(rr * PINSCALE, (rr + 0.006) * PINSCALE, 0.05 * PINSCALE, 24, 1, true), pinBandMat);
+      ring.position.y = yy * PINSCALE; grp.add(ring);
+    });
     return grp;
   }
 
@@ -95,7 +129,7 @@
     const seats = [];
     for (const side of [-1, 1]) for (let row = 0; row < 5; row++) for (let seat = 0; seat < 13; seat++) {
       if (Math.random() < 0.08) continue;                        // a few empty seats
-      seats.push({ x: side * (8.2 + row * 1.2) + (Math.random() - .5) * .35, y: 0.55 + row * 0.8, z: 10 - seat * 1.5 + (Math.random() - .5) * .35, rot: (side > 0 ? -1.35 : 1.35) + (Math.random() - .5) * .4, s: 1.0 + Math.random() * 0.35, phase: Math.random() * 7 });
+      seats.push({ x: side * (8.2 + row * 1.2) + (Math.random() - .5) * .35, y: 0.55 + row * 0.8, z: 10 - seat * 1.5 + (Math.random() - .5) * .35, rot: (side > 0 ? -1.35 : 1.35) + (Math.random() - .5) * .4, s: 1.0 + Math.random() * 0.35, phase: Math.random() * 7, stand: 0.55 + Math.random() * 0.45 });
     }
     const N = seats.length;
     const torso = new T.InstancedMesh(new T.CylinderGeometry(0.27, 0.2, 0.62, 8), new T.MeshStandardMaterial({ roughness: 0.82 }), N);
@@ -111,14 +145,19 @@
   }
   function updateCrowd(t) {
     if (!crowd) return; const d3 = crowd.d3;
+    const ex = crowd.excite;
     crowd.data.forEach((d, i) => {
-      const bob = Math.sin(t * 2.2 + d.phase) * (0.02 + crowd.excite * 0.45);
-      d3.position.set(d.x, d.y + bob, d.z); d3.rotation.set(0, d.rot, 0); d3.scale.setScalar(d.s); d3.updateMatrix(); crowd.torso.setMatrixAt(i, d3.matrix);
-      d3.position.y += d.s * 0.52; d3.updateMatrix(); crowd.head.setMatrixAt(i, d3.matrix);
+      // idle: gentle seated sway. excited: a positive-only pop so they rise/jump up in a wave.
+      const idle = Math.sin(t * 2.2 + d.phase) * 0.02;
+      const jump = ex > 0 ? Math.max(0, Math.sin(t * 7 + d.phase * 2)) * ex * d.stand * 0.7 : 0;
+      const sy = d.s * (1 + ex * d.stand * 0.25);   // stretch taller when on their feet
+      d3.position.set(d.x, d.y + idle + jump, d.z); d3.rotation.set(0, d.rot, 0); d3.scale.set(d.s, sy, d.s); d3.updateMatrix(); crowd.torso.setMatrixAt(i, d3.matrix);
+      d3.scale.setScalar(d.s);
+      d3.position.y += sy * 0.52; d3.updateMatrix(); crowd.head.setMatrixAt(i, d3.matrix);
       d3.position.y += d.s * 0.1; d3.updateMatrix(); crowd.hair.setMatrixAt(i, d3.matrix);
     });
     crowd.torso.instanceMatrix.needsUpdate = crowd.head.instanceMatrix.needsUpdate = crowd.hair.instanceMatrix.needsUpdate = true;
-    if (crowd.excite > 0) crowd.excite = Math.max(0, crowd.excite - 0.012);
+    if (crowd.excite > 0) crowd.excite = Math.max(0, crowd.excite - 0.008);
   }
   function cheer() { if (crowd) crowd.excite = 1; }
   // a scorer's / judges' table off to the side of the approach
@@ -130,6 +169,56 @@
     for (const jx of [-1.0, 0, 1.0]) { const j = seatedPerson(pick(CLOTH), pick(SKIN), pick(HAIR)); j.position.set(jx, 0.05, -0.5); j.scale.setScalar(1.15); g.add(j); }
     for (const mx of [-0.8, 0.8]) { const mon = new T.Mesh(new T.BoxGeometry(0.72, 0.44, 0.05), new T.MeshStandardMaterial({ color: 0x0a0e18, emissive: 0x123a52, emissiveIntensity: 0.7, roughness: 0.3 })); mon.position.set(mx, 1.28, 0.0); mon.rotation.x = -0.22; g.add(mon); }
     scene.add(g);
+  }
+  // pinsetter sweep bar — parks above the pit, drops and sweeps the deck when a fresh rack is set
+  function buildSweep() {
+    sweep = new T.Group();
+    const bar = new T.Mesh(new T.BoxGeometry(LANE_HW * 2 + GUT * 2, 0.9, 0.22), new T.MeshStandardMaterial({ color: 0x1a1f2b, roughness: 0.5, metalness: 0.5 }));
+    bar.castShadow = true; sweep.add(bar);
+    const trim = new T.Mesh(new T.BoxGeometry(LANE_HW * 2 + GUT * 2, 0.16, 0.26), new T.MeshStandardMaterial({ color: 0xff5a2c, emissive: 0xff5a2c, emissiveIntensity: 0.5, roughness: 0.4 }));
+    trim.position.y = -0.52; sweep.add(trim);
+    sweep.position.set(0, 3.4, -LANE_LEN - 2.6);   // parked, up and back
+    scene.add(sweep);
+  }
+  const SWEEP_PARK = { y: 3.4, z: -LANE_LEN - 2.6 };
+  function triggerSweep() { sweepAnim = { t: 0, dur: 1.15 }; }
+  function animateSweep(dt) {
+    if (!sweep) return;
+    if (!sweepAnim) { sweep.position.set(0, SWEEP_PARK.y, SWEEP_PARK.z); return; }
+    sweepAnim.t += dt; const p = Math.min(1, sweepAnim.t / sweepAnim.dur);
+    // phases: drop (0-.22) → sweep forward over deck (.22-.62) → retract up (.62-.85) → glide back (.85-1)
+    const deckFront = -LANE_LEN + 1.2, deckBack = -LANE_LEN - 2.6, downY = 0.55;
+    if (p < 0.22) { const k = p / 0.22; sweep.position.set(0, lerp(SWEEP_PARK.y, downY, k), deckBack); }
+    else if (p < 0.62) { const k = (p - 0.22) / 0.40; sweep.position.set(0, downY, lerp(deckBack, deckFront, k)); }
+    else if (p < 0.85) { const k = (p - 0.62) / 0.23; sweep.position.set(0, lerp(downY, SWEEP_PARK.y, k), deckFront); }
+    else { const k = (p - 0.85) / 0.15; sweep.position.set(0, SWEEP_PARK.y, lerp(deckFront, deckBack, k)); }
+    if (p >= 1) sweepAnim = null;
+  }
+  // overhead scoreboard above the pin deck
+  function scoreboardTexture() {
+    const c = document.createElement("canvas"); c.width = 1024; c.height = 320; const x = c.getContext("2d");
+    const bg = x.createLinearGradient(0, 0, 0, 320); bg.addColorStop(0, "#0a1830"); bg.addColorStop(1, "#06101f");
+    x.fillStyle = bg; x.fillRect(0, 0, 1024, 320);
+    x.strokeStyle = "rgba(50,224,207,.5)"; x.lineWidth = 6; x.strokeRect(8, 8, 1008, 304);
+    x.textAlign = "center"; x.textBaseline = "middle";
+    x.font = "92px Anton, Arial Narrow, sans-serif"; x.fillStyle = "#ff5a2c"; x.fillText("STRIKE", 300, 110);
+    x.fillStyle = "#f6f1e7"; x.fillText("CAST", 560, 110);
+    x.font = "40px Space Mono, monospace"; x.fillStyle = "#32e0cf"; x.fillText("· LANE 1 ·", 300, 210);
+    x.fillStyle = "rgba(246,241,231,.85)"; x.font = "34px Space Mono, monospace"; x.fillText("HOOK  PHYSICS  BOWLING", 420, 262);
+    // mini pin triangle on the right
+    const cx = 830, cy = 150, r = 15; x.fillStyle = "#f6f1e7";
+    const rows = [[0], [-1, 1], [-2, 0, 2], [-3, -1, 1, 3]];
+    rows.forEach((row, ri) => row.forEach((off) => { x.beginPath(); x.arc(cx + off * r * 1.15, cy - 54 + ri * r * 2.2, r, 0, 7); x.fill(); }));
+    const tex = new T.CanvasTexture(c); tex.colorSpace = T.SRGBColorSpace; return tex;
+  }
+  function buildScoreboard() {
+    const g = new T.Group(); g.position.set(0, 6.3, -LANE_LEN - 4.2);
+    const panel = new T.Mesh(new T.PlaneGeometry(10, 3.1), new T.MeshBasicMaterial({ map: scoreboardTexture() }));
+    g.add(panel);
+    const frame = new T.Mesh(new T.BoxGeometry(10.5, 3.6, 0.3), new T.MeshStandardMaterial({ color: 0x0a0e16, roughness: 0.6, metalness: 0.3 }));
+    frame.position.z = -0.2; g.add(frame);
+    addGlow(new T.Vector3(0, 0, 0.3), 0x1b6ea0, 11, g);
+    scene.add(g); scoreboard = g;
   }
   function buildEnv() {
     // concourse / settee floor
@@ -145,13 +234,14 @@
     // ceiling + light strips
     const ceil = new T.Mesh(new T.BoxGeometry(70, 0.3, LANE_LEN + 50), new T.MeshStandardMaterial({ color: 0x0b0e15, roughness: 0.95 }));
     ceil.position.set(0, 9.2, -LANE_LEN / 2 + 5); scene.add(ceil);
-    for (let z = 2; z > -LANE_LEN; z -= 11) { const strip = new T.Mesh(new T.BoxGeometry(58, 0.1, 1.3), new T.MeshBasicMaterial({ color: 0x2c3a58 })); strip.position.set(0, 9.0, z); scene.add(strip); }
+    for (let z = 2; z > -LANE_LEN; z -= 11) { const strip = new T.Mesh(new T.BoxGeometry(58, 0.1, 1.3), new T.MeshBasicMaterial({ color: 0x3a4c74 })); strip.position.set(0, 9.0, z); scene.add(strip); addGlow(new T.Vector3(0, 8.7, z), 0x2c3a58, 10); }
     // side walls
     [-1, 1].forEach((s) => { const w = new T.Mesh(new T.BoxGeometry(0.5, 11, LANE_LEN + 50), new T.MeshStandardMaterial({ color: 0x0f1219, roughness: 0.95 })); w.position.set(s * 24, 4.5, -LANE_LEN / 2 + 5); scene.add(w); });
     // back wall behind the gallery
     const back = new T.Mesh(new T.BoxGeometry(70, 11, 0.5), new T.MeshStandardMaterial({ color: 0x0c0f16, roughness: 0.95 })); back.position.set(0, 4.5, 16); scene.add(back);
     buildCrowd();
     buildJudges();
+    buildScoreboard();
   }
 
   function init(container) {
@@ -159,18 +249,27 @@
     renderer.setPixelRatio(Math.min(2, global.devicePixelRatio || 1));
     renderer.shadowMap.enabled = true; renderer.shadowMap.type = T.PCFSoftShadowMap;
     renderer.outputColorSpace = T.SRGBColorSpace;
+    renderer.toneMapping = T.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.08;   // cinematic contrast + highlight rolloff
     container.appendChild(renderer.domElement);
 
-    scene = new T.Scene(); scene.background = new T.Color(0x06080d); scene.fog = new T.Fog(0x06080d, 40, 95);
+    scene = new T.Scene(); scene.background = new T.Color(0x05070c); scene.fog = new T.Fog(0x05070c, 42, 98);
     cam = new T.PerspectiveCamera(55, 1, 0.1, 200);
 
-    scene.add(new T.AmbientLight(0x9fb0d0, 0.72));
-    const key = new T.DirectionalLight(0xfff0e0, 1.15); key.position.set(4, 16, 10); key.castShadow = true;
-    key.shadow.mapSize.set(1024, 1024); key.shadow.camera.left = -8; key.shadow.camera.right = 8; key.shadow.camera.top = 6; key.shadow.camera.bottom = -70; key.shadow.camera.far = 120;
+    // soft sky/ground ambient instead of flat fill
+    scene.add(new T.HemisphereLight(0x9fb4da, 0x161a24, 0.85));
+    const key = new T.DirectionalLight(0xfff0e0, 1.25); key.position.set(4, 16, 10); key.castShadow = true;
+    key.shadow.mapSize.set(2048, 2048); key.shadow.bias = -0.0004;
+    key.shadow.camera.left = -8; key.shadow.camera.right = 8; key.shadow.camera.top = 6; key.shadow.camera.bottom = -70; key.shadow.camera.far = 120;
     scene.add(key);
-    const fill = new T.DirectionalLight(0xbfd0ff, 0.35); fill.position.set(-6, 8, 6); scene.add(fill);
-    const p1 = new T.PointLight(0xff5a2c, 34, 46); p1.position.set(-9, 7, -16); scene.add(p1);
-    const p2 = new T.PointLight(0x32e0cf, 32, 55); p2.position.set(9, 7, -44); scene.add(p2);
+    const fill = new T.DirectionalLight(0xbfd0ff, 0.3); fill.position.set(-6, 8, 6); scene.add(fill);
+    // neon house accents (with additive glow halos so they read as real lights)
+    const p1 = new T.PointLight(0xff5a2c, 40, 48, 1.6); p1.position.set(-9, 7, -16); scene.add(p1); addGlow(p1.position, 0xff5a2c, 7);
+    const p2 = new T.PointLight(0x32e0cf, 38, 58, 1.6); p2.position.set(9, 7, -44); scene.add(p2); addGlow(p2.position, 0x32e0cf, 8);
+    const p3 = new T.PointLight(0x4a74ff, 26, 40, 1.8); p3.position.set(8, 6, -8); scene.add(p3); addGlow(p3.position, 0x4a74ff, 6);
+    // a hard spotlight on the pin deck so the pins pop out of the dark end
+    pinLight = new T.SpotLight(0xffffff, 120, 0, 0.5, 0.6, 1.4);
+    pinLight.position.set(0, 10, -LANE_LEN + 6); pinLight.target.position.set(0, 0, -LANE_LEN - 2);
+    scene.add(pinLight); scene.add(pinLight.target);
 
     // lane
     laneMat = new T.MeshStandardMaterial({ map: laneTexture(), roughness: 0.35, metalness: 0.15 });
@@ -185,8 +284,10 @@
     const wall = new T.Mesh(new T.BoxGeometry(LANE_HW * 2 + GUT * 2, 7, 0.4), new T.MeshStandardMaterial({ color: 0x0b1017, roughness: 0.9 }));
     wall.position.set(0, 3, -LANE_LEN - 5); scene.add(wall);
 
-    // ball
-    ball = new T.Mesh(new T.SphereGeometry(BR, 40, 40), new T.MeshStandardMaterial({ color: 0xd63c12, roughness: 0.22, metalness: 0.35 }));
+    // ball — wet-looking polished resin (clearcoat) with a pearl swirl
+    const ballMat = new T.MeshPhysicalMaterial({ color: 0xd63c12, roughness: 0.18, metalness: 0.0, clearcoat: 1.0, clearcoatRoughness: 0.08, sheen: 0.4, sheenColor: new T.Color(0x3a4a8a) });
+    ballMat.map = ballSwirl(); ballMat.map.colorSpace = T.SRGBColorSpace;
+    ball = new T.Mesh(new T.SphereGeometry(BR, 48, 48), ballMat);
     ball.castShadow = true; ball.position.set(0, BR, 0); scene.add(ball);
     // finger holes (3 small dark discs)
     const holeMat = new T.MeshStandardMaterial({ color: 0x05060a, roughness: 0.9 });
@@ -206,16 +307,19 @@
     returnBall.position.set(0, 0.65, 0.2); rack.add(returnBall);
     rack.position.set(LANE_HW + GUT + 0.9, 0, 1.8); scene.add(rack);
 
+    buildSweep();
     buildEnv();
     camSet("establish", 0, true);
     resize();
     global.addEventListener("resize", resize);
+    booted = true;
     loop();
   }
 
   function resetRack() {
     pinAnim = pins.map(() => null);
     pins.forEach((pin, i) => { pin.visible = true; pin.position.set(PINS[i].x * LANE_HW, 0, -LANE_LEN - PINS[i].y * PINROW); pin.rotation.set(0, 0, 0); });
+    if (booted) triggerSweep();
   }
   function setStanding(standing) { pins.forEach((pin, i) => { if (!standing[i] && !pinAnim[i]) pin.visible = false; }); }
 
@@ -279,6 +383,7 @@
     raf = requestAnimationFrame(loop);
     const dt = Math.min(0.05, (ts - lastT) / 1000 || 0); lastT = ts;
     updateCrowd(ts / 1000);
+    animateSweep(dt);
     // ball roll
     if (rollState) {
       rollState.t += dt; const prog = Math.min(1, rollState.t / rollState.dur);
