@@ -18,6 +18,56 @@
   let renderer, scene, cam, ball, pins = [], pinAnim = [], laneMat, raf = 0, lastT = 0;
   let camMode = "ready", camTarget = new T.Vector3(), rollState = null, deliverState = null, returnBall = null;
   let crowd = null, sweep = null, sweepAnim = null, scoreboard = null, pinLight = null, booted = false;
+  let reflector = null, rackAnim = null;
+
+  // ---- planar reflector (real mirror via a render target + mirrored virtual camera) ----
+  // compact adaptation of three's examples Reflector, driven by the global THREE, tuned
+  // to a subtle semi-transparent lane sheen rather than a full mirror.
+  function makeReflector(geometry, opts) {
+    opts = opts || {};
+    const color = new T.Color(opts.color !== undefined ? opts.color : 0x303038);
+    const tw = opts.textureWidth || 1024, th = opts.textureHeight || 1024, clipBias = opts.clipBias || 0.003;
+    const opacity = opts.opacity !== undefined ? opts.opacity : 0.3;
+    const mesh = new T.Mesh(geometry);
+    const rt = new T.WebGLRenderTarget(tw, th);
+    const rPlane = new T.Plane(), normal = new T.Vector3(), rPos = new T.Vector3(), cPos = new T.Vector3();
+    const rot = new T.Matrix4(), look = new T.Vector3(0, 0, -1), clip = new T.Vector4();
+    const view = new T.Vector3(), target = new T.Vector3(), q = new T.Vector4(), texM = new T.Matrix4();
+    const vcam = new T.PerspectiveCamera();
+    const mat = new T.ShaderMaterial({
+      uniforms: { color: { value: color }, tDiffuse: { value: rt.texture }, textureMatrix: { value: texM }, opacity: { value: opacity } },
+      transparent: true,
+      vertexShader: "uniform mat4 textureMatrix; varying vec4 vUv; void main(){ vUv = textureMatrix * vec4(position,1.0); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }",
+      fragmentShader: "uniform vec3 color; uniform float opacity; uniform sampler2D tDiffuse; varying vec4 vUv; float bo(float b,float l){return b<0.5?(2.0*b*l):(1.0-2.0*(1.0-b)*(1.0-l));} void main(){ vec4 base = texture2DProj(tDiffuse, vUv); gl_FragColor = vec4(vec3(bo(base.r,color.r),bo(base.g,color.g),bo(base.b,color.b)), opacity); }",
+    });
+    mesh.material = mat;
+    mesh.onBeforeRender = function (rndr, scn, camera) {
+      rPos.setFromMatrixPosition(mesh.matrixWorld); cPos.setFromMatrixPosition(camera.matrixWorld);
+      rot.extractRotation(mesh.matrixWorld); normal.set(0, 0, 1).applyMatrix4(rot);
+      view.subVectors(rPos, cPos); if (view.dot(normal) > 0) return;
+      view.reflect(normal).negate().add(rPos);
+      rot.extractRotation(camera.matrixWorld);
+      look.set(0, 0, -1).applyMatrix4(rot).add(cPos);
+      target.subVectors(rPos, look).reflect(normal).negate().add(rPos);
+      vcam.position.copy(view); vcam.up.set(0, 1, 0).applyMatrix4(rot).reflect(normal);
+      vcam.lookAt(target); vcam.far = camera.far; vcam.updateMatrixWorld(); vcam.projectionMatrix.copy(camera.projectionMatrix);
+      texM.set(0.5, 0, 0, 0.5, 0, 0.5, 0, 0.5, 0, 0, 0.5, 0.5, 0, 0, 0, 1);
+      texM.multiply(vcam.projectionMatrix).multiply(vcam.matrixWorldInverse).multiply(mesh.matrixWorld);
+      rPlane.setFromNormalAndCoplanarPoint(normal, rPos).applyMatrix4(vcam.matrixWorldInverse);
+      clip.set(rPlane.normal.x, rPlane.normal.y, rPlane.normal.z, rPlane.constant);
+      const P = vcam.projectionMatrix.elements;
+      q.x = (Math.sign(clip.x) + P[8]) / P[0]; q.y = (Math.sign(clip.y) + P[9]) / P[5]; q.z = -1; q.w = (1 + P[10]) / P[14];
+      clip.multiplyScalar(2 / clip.dot(q));
+      P[2] = clip.x; P[6] = clip.y; P[10] = clip.z + 1 - clipBias; P[14] = clip.w;
+      const prevRT = rndr.getRenderTarget(), prevShadow = rndr.shadowMap.autoUpdate;
+      mesh.visible = false; rndr.shadowMap.autoUpdate = false;
+      rndr.setRenderTarget(rt); rndr.state.buffers.depth.setMask(true); if (rndr.autoClear === false) rndr.clear();
+      rndr.render(scn, vcam);
+      rndr.shadowMap.autoUpdate = prevShadow; rndr.setRenderTarget(prevRT); mesh.visible = true;
+    };
+    mesh.renderOrder = 1;
+    return mesh;
+  }
 
   // ---- radial glow sprite (fake bloom around lights / neon, no post-processing) ----
   let _glowTex = null;
@@ -275,6 +325,9 @@
     laneMat = new T.MeshStandardMaterial({ map: laneTexture(), roughness: 0.35, metalness: 0.15 });
     const lane = new T.Mesh(new T.BoxGeometry(LANE_HW * 2, 0.3, LANE_LEN + 8), laneMat);
     lane.position.set(0, -0.15, -LANE_LEN / 2 + 1); lane.receiveShadow = true; scene.add(lane);
+    // polished-lane reflection: a subtle real mirror film just above the wood
+    reflector = makeReflector(new T.PlaneGeometry(LANE_HW * 2, LANE_LEN + 8), { color: 0x2b2b33, opacity: 0.26, textureWidth: 1024, textureHeight: 1024 });
+    reflector.rotation.x = -Math.PI / 2; reflector.position.set(0, 0.004, -LANE_LEN / 2 + 1); scene.add(reflector);
     // gutters
     const gm = new T.MeshStandardMaterial({ color: 0x05070c, roughness: 0.8 });
     [-1, 1].forEach((s) => { const g = new T.Mesh(new T.BoxGeometry(GUT, 0.5, LANE_LEN + 8), gm); g.position.set(s * (LANE_HW + GUT / 2), -0.35, -LANE_LEN / 2 + 1); scene.add(g); });
@@ -316,10 +369,16 @@
     loop();
   }
 
+  const RACK_DROP = 2.6;                      // how high the setter holds the pins before lowering
   function resetRack() {
     pinAnim = pins.map(() => null);
     pins.forEach((pin, i) => { pin.visible = true; pin.position.set(PINS[i].x * LANE_HW, 0, -LANE_LEN - PINS[i].y * PINROW); pin.rotation.set(0, 0, 0); });
-    if (booted) triggerSweep();
+    if (booted) {
+      triggerSweep();
+      // lift the fresh rack up and let the pinsetter lower it once the sweep has cleared the deck
+      pins.forEach((pin) => { pin.position.y = RACK_DROP; });
+      rackAnim = { t: 0, delay: 0.62, dur: 0.55 };
+    }
   }
   function setStanding(standing) { pins.forEach((pin, i) => { if (!standing[i] && !pinAnim[i]) pin.visible = false; }); }
 
@@ -384,6 +443,15 @@
     const dt = Math.min(0.05, (ts - lastT) / 1000 || 0); lastT = ts;
     updateCrowd(ts / 1000);
     animateSweep(dt);
+    // pinsetter lowering the fresh rack into place
+    if (rackAnim) {
+      rackAnim.t += dt;
+      const p = Math.max(0, (rackAnim.t - rackAnim.delay) / rackAnim.dur);
+      const e = p >= 1 ? 1 : 1 - Math.pow(1 - p, 3);          // easeOutCubic settle
+      const y = lerp(RACK_DROP, 0, e);
+      for (let i = 0; i < pins.length; i++) if (!pinAnim[i] && pins[i].visible) pins[i].position.y = y;
+      if (p >= 1) rackAnim = null;
+    }
     // ball roll
     if (rollState) {
       rollState.t += dt; const prog = Math.min(1, rollState.t / rollState.dur);
