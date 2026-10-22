@@ -27,6 +27,19 @@
   let stats = null;
   const resetStats = () => (stats = { shots: 0, strikes: 0, spares: 0, pocket: 0, sumBoard: 0, sumAngle: 0, sumMph: 0, sumRev: 0 });
   let players = [], cur = { p: 0, f: 0 }, standing = new Array(10).fill(true), gameOver = false, busy = false;
+  let streak = 0;   // strikes in a row — a double, then a turkey, then you're bagging them
+
+  // the call a bowler actually makes, by how hot you are
+  function strikeCall() {
+    streak++;
+    if (streak === 1) return "FLUSH IN THE POCKET";
+    if (streak === 2) return "DOUBLE";
+    if (streak === 3) return "TURKEY 🦃";
+    if (streak === 4) return "FOUR-BAGGER";
+    if (streak === 5) return "FIVE-BAGGER";
+    if (streak >= 6) return streak + " IN A ROW — WHO IS THIS";
+    return "STRIKE";
+  }
 
   // ---------------------------------------------------------------- home / options UI
   document.querySelectorAll("[data-mode]").forEach((b) => b.addEventListener("click", () => { mode = b.dataset.mode; SFX.resume(); openOptions(); }));
@@ -47,12 +60,12 @@
       $("#codeOut").textContent = code; $("#joinHost").textContent = joinBase.replace(/^https?:\/\//, "");
       const camHost = $("#camHost"); if (camHost) camHost.textContent = (location.origin + "/bowl/camera").replace(/^https?:\/\//, "");
       $("#qr").innerHTML = ""; try { new QRCode($("#qr"), { text: joinBase + "#" + code, width: 168, height: 168, colorDark: "#0a0c12", colorLight: "#fff", correctLevel: QRCode.CorrectLevel.M }); } catch (_) {}
-      $("#pairDot").className = "dot wait"; $("#pairMsg").textContent = "Waiting for a phone…";
+      $("#pairDot").className = "dot wait"; $("#pairMsg").textContent = "Grab your phone — that's the ball";
     });
     net.on("paired", () => { net.send({ t: "hello", role: "tv", mode: mode, oil: oilId }); startLane(); });
     net.on("message", onPhoneMessage);
-    net.on("dropped", () => setStatus("off", "controller lost"));
-    net.on("error", () => { $("#pairDot").className = "dot off"; $("#pairMsg").textContent = "Couldn't open a lane — try Practice-local below."; });
+    net.on("dropped", () => setStatus("off", "lost the phone"));
+    net.on("error", () => { $("#pairDot").className = "dot off"; $("#pairMsg").textContent = "Couldn't reach the lane. Throw solo instead?"; });
   }
   $("#backHome2") && $("#backHome2").addEventListener("click", () => { if (net) net.destroy(); net = null; show("opt"); });
   $("#skipPair") && $("#skipPair").addEventListener("click", () => { local = true; if (net) net.destroy(); startLane(); });
@@ -93,7 +106,8 @@
       if (pocket) stats.pocket++;
       if (res.count === 10 && firstBallFresh) stats.strikes++;
       updateTelemetry(r, res, leave, pocket); renderPracticeStats();
-      if (res.count === 10 && firstBallFresh) { toast("STRIKE!", ""); SFX.cheer(); A3D.cheer(); } else if (r.gutter) toast("Gutter", "spare", 900);
+      if (res.count === 10 && firstBallFresh) { toast(strikeCall(), ""); SFX.cheer(); A3D.cheer(); }
+      else { streak = 0; if (r.gutter) toast("Straight in the ditch", "spare", 1100); }
       setTimeout(() => { if (mode === "practice") { standing = new Array(10).fill(true); ballReturn(); } }, 1800);
     } else advanceGame(res.count, leave);
     busy = false;
@@ -111,7 +125,7 @@
 
   // ---------------------------------------------------------------- telemetry (practice)
   function updateTelemetry(r, res, leave, pocket) {
-    const pins = r.gutter ? "Gutter" : (res.count === 10 ? "STRIKE" : (leave.length ? leave.join("-") : (res.count + " down")));
+    const pins = r.gutter ? "In the ditch" : (res.count === 10 ? "Flush — all ten" : (leave.length ? "left the " + leave.join("-") : (res.count + " down")));
     const rows = [["Ball speed", r.speedMph.toFixed(1) + " mph"], ["Rev rate", Math.round(r.revRate) + " rpm"], ["Launch", "board " + r.launchBoard],
       ["Break point", r.gutter ? "—" : ("board " + r.breakBoard + " @ " + r.breakFeet + "ft")], ["Entry board", r.gutter ? "gutter" : ("board " + r.entryBoard + (pocket ? " ✓ pocket" : ""))],
       ["Entry angle", r.gutter ? "—" : (r.entryAngle.toFixed(1) + "°")], ["Result", pins]];
@@ -141,8 +155,9 @@
   function advanceGame(knocked) {
     const fr = players[cur.p].frames[cur.f]; fr.rolls.push(knocked); renderBoard();
     const rr = fr.rolls, rn = rr.length;
-    if (knocked === 10 && (rn === 1 || cur.f === 9)) { toast("STRIKE!", ""); SFX.cheer(); A3D.cheer(); }
-    else if (rn >= 2 && rr[rn - 2] + rr[rn - 1] === 10 && rr[rn - 2] !== 10) { toast("SPARE", "spare"); SFX.cheer(); A3D.cheer(); }
+    if (knocked === 10 && (rn === 1 || cur.f === 9)) { toast(strikeCall(), ""); SFX.cheer(); A3D.cheer(); }
+    else if (rn >= 2 && rr[rn - 2] + rr[rn - 1] === 10 && rr[rn - 2] !== 10) { streak = 0; toast("Picked it clean", "spare"); SFX.cheer(); A3D.cheer(); }
+    else if (knocked !== 10) streak = 0;
     const last = cur.f === 9;
     if (!last) { const strike = fr.rolls.length === 1 && fr.rolls[0] === 10; if (strike || fr.rolls.length === 2) nextTurn(); else readyTurn(); }
     else { const r = fr.rolls, n = r.length;
@@ -158,7 +173,7 @@
     renderBoard(); ballReturn();
     if (net) net.send({ t: "turn", player: players[cur.p].name, frame: cur.f + 1, ball: fr.rolls.length + 1 });
   }
-  function endGame() { gameOver = true; const ranked = players.map((p) => ({ name: p.name, score: (computeTotals(p).filter((x) => x != null).pop()) || 0 })).sort((a, b) => b.score - a.score); toast(ranked[0].name + " wins — " + ranked[0].score, "", 4000); SFX.cheer(); A3D.cheer(); if (net) net.send({ t: "gameover", winner: ranked[0].name, score: ranked[0].score }); }
+  function endGame() { gameOver = true; const ranked = players.map((p) => ({ name: p.name, score: (computeTotals(p).filter((x) => x != null).pop()) || 0 })).sort((a, b) => b.score - a.score); toast(ranked[0].name + " takes the house — " + ranked[0].score, "", 4000); SFX.cheer(); A3D.cheer(); if (net) net.send({ t: "gameover", winner: ranked[0].name, score: ranked[0].score }); }
   function renderBoard() {
     const tb = $("#board"); if (!tb) return;
     let head = "<tr><th class='pname'>Bowler</th>"; for (let f = 1; f <= 10; f++) head += "<th>" + f + "</th>"; head += "</tr>";
@@ -182,7 +197,7 @@
   // ---------------------------------------------------------------- phone msgs
   function onPhoneMessage(d) {
     if (!d || typeof d !== "object") return;
-    if (d.t === "hello") { setStatus("on", "phone connected"); if (net) net.send({ t: "config", mode, oil: oilId }); }
+    if (d.t === "hello") { setStatus("on", "phone's on — wind up"); if (net) net.send({ t: "config", mode, oil: oilId }); }
     else if (d.t === "settings") { bowler = { ballId: d.ballId || bowler.ballId, hand: d.hand || bowler.hand }; showBowler(); }
     else if (d.t === "stance") { if (!busy) A3D.aimBall((20 - d.board) / 19); }
     else if (d.t === "shot") throwShot(d);
@@ -198,7 +213,7 @@
     $("#boardWrap").hidden = mode !== "game";
     $("#whoUp").hidden = mode !== "game";
     $("#frameNo").hidden = mode !== "game";
-    setStatus(local ? "wait" : "on", local ? "local practice" : "phone connected");
+    setStatus(local ? "wait" : "on", local ? "throwing solo" : "phone's on — wind up");
     showBowler();
     standing = new Array(10).fill(true); gameOver = false; busy = false;
     if (mode === "practice") { resetStats(); $("#telemetry").innerHTML = emptyTelemetry(); $("#pstats").innerHTML = ""; }

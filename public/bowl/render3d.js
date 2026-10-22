@@ -291,7 +291,7 @@
     x.font = "92px Anton, Arial Narrow, sans-serif"; x.fillStyle = "#ff5a2c"; x.fillText("STRIKE", 300, 110);
     x.fillStyle = "#f6f1e7"; x.fillText("CAST", 560, 110);
     x.font = "40px Space Mono, monospace"; x.fillStyle = "#32e0cf"; x.fillText("· LANE 1 ·", 300, 210);
-    x.fillStyle = "rgba(246,241,231,.85)"; x.font = "34px Space Mono, monospace"; x.fillText("HOOK  PHYSICS  BOWLING", 420, 262);
+    x.fillStyle = "rgba(246,241,231,.85)"; x.font = "34px Space Mono, monospace"; x.fillText("PUT  SOME  REVS  ON  IT", 420, 262);
     // mini pin triangle on the right
     const cx = 830, cy = 150, r = 15; x.fillStyle = "#f6f1e7";
     const rows = [[0], [-1, 1], [-2, 0, 2], [-3, -1, 1, 3]];

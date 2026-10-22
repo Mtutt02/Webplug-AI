@@ -69,11 +69,11 @@
 <section id="connect" class="screen show">
   <div class="brand"><svg class="logo" viewBox="0 0 30 30"><circle cx="15" cy="15" r="14" fill="none" stroke="#1a2030" stroke-width="2"/><path d="M15 4C11 10 11 20 15 26 19 20 19 10 15 4Z" fill="#f6f1e7"/><circle cx="15" cy="9" r="2.1" fill="#ff5a2c"/></svg>Strike<span class="mk">Cast</span></div>
   <div class="col center" style="gap:16px">
-    <p class="eyebrow">Pair with the big screen</p>
-    <h1>Enter the code</h1>
-    <p class="muted" style="margin:0">Shown on the TV / iPad. Or scan the QR to skip this.</p>
+    <p class="eyebrow">Hook up to the big screen</p>
+    <h1>Punch in the code</h1>
+    <p class="muted" style="margin:0">It's up on the TV. Or scan the QR and skip all this.</p>
     <div class="codein"><input id="codeIn" inputmode="latin" autocapitalize="characters" autocomplete="off" maxlength="4" placeholder="····"></div>
-    <div class="status center"><span class="dot" id="cDot"></span><span id="cMsg">Waiting for a code</span></div>
+    <div class="status center"><span class="dot" id="cDot"></span><span id="cMsg">Waiting on the code</span></div>
     <button class="btn primary" id="connectBtn" disabled>Connect</button>
   </div>
 </section>
@@ -143,14 +143,14 @@
   let pairTimer = null, isPaired = false;
   async function connect() {
     const code = codeIn.value; if (code.length !== 4) return;
-    connectBtn.disabled = true; $("#cDot").className = "dot wait"; $("#cMsg").textContent = "Connecting…";
+    connectBtn.disabled = true; $("#cDot").className = "dot wait"; $("#cMsg").textContent = "Finding the lane…";
     await requestMotion();
     isPaired = false;
     net = window.StrikeNet.join(code);
     net.on("paired", () => { isPaired = true; clearTimeout(pairTimer); net.send({ t: "hello", role: "phone" }); startController(); });
     net.on("message", onTvMessage);
     net.on("dropped", () => { $("#gDot").className = "dot off"; $("#gMsg").textContent = "lost the lane"; });
-    net.on("error", () => failConnect("No lane with that code. Check the TV and try again."));
+    net.on("error", () => failConnect("No lane with that code. Check the TV and try again."));   // keep it plain — this is the \"something broke\" moment
     clearTimeout(pairTimer);
     pairTimer = setTimeout(() => { if (!isPaired) { try { net.destroy(); } catch (_) {} failConnect("Couldn't reach the lane. Check the code on the TV, then tap Connect."); } }, 14000);
   }
