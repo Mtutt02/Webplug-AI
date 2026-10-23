@@ -117,7 +117,7 @@
       if (pocket) stats.pocket++;
       if (res.count === 10 && firstBallFresh) stats.strikes++;
       stats.log.push({ mph: r.speedMph, rev: r.revRate, board: r.gutter ? null : r.entryBoard, angle: r.entryAngle, pocket, gutter: !!r.gutter, strike: res.count === 10 && firstBallFresh });
-      updateTelemetry(r, res, leave, pocket); renderPracticeStats(); renderConsistency();
+      updateTelemetry(r, res, leave, pocket); renderPracticeStats(); renderHistory(); renderConsistency();
       if (res.count === 10 && firstBallFresh) { toast(strikeCall(), ""); stats.bestStreak = Math.max(stats.bestStreak, streak); SFX.cheer(); A3D.cheer(); }
       else { streak = 0; if (r.gutter) toast("Straight in the ditch", "spare", 1100); }
       setTimeout(() => { if (mode === "practice") { standing = new Array(10).fill(true); ballReturn(); } }, 1800);
@@ -161,6 +161,20 @@
     $("#pstats").innerHTML = [["Shots", s.shots], ["Strikes", Math.round(s.strikes / s.shots * 100) + "%"], ["Pocket", Math.round(s.pocket / s.shots * 100) + "%"],
       ["Avg entry", (s.sumBoard / s.shots).toFixed(1) + " bd"], ["Avg angle", (s.sumAngle / s.shots).toFixed(1) + "°"], ["Avg speed", (s.sumMph / s.shots).toFixed(1) + " mph"]]
       .map(([k, v]) => `<div class="stat"><div class="sv">${v}</div><div class="sk">${k}</div></div>`).join("");
+  }
+
+  // ---- per-shot history strip (last dozen shots at a glance) ----
+  function renderHistory() {
+    const el = $("#phist"); if (!el) return;
+    const L = stats.log.slice(-12);
+    if (!L.length) { el.innerHTML = ""; return; }
+    const bars = L.map((x) => {
+      const h = Math.round(clamp((x.rev - 80) / (560 - 80), 0.08, 1) * 100);
+      const cls = x.gutter ? "g" : x.strike ? "x" : x.pocket ? "p" : "o";
+      const tag = x.gutter ? "gutter" : x.strike ? "strike" : x.pocket ? "pocket" : (x.board != null ? "board " + Math.round(x.board) : "open");
+      return `<div class="hbar ${cls}" style="height:${h}%" title="${x.mph.toFixed(1)} mph · ${Math.round(x.rev)} rpm · ${tag}"></div>`;
+    }).join("");
+    el.innerHTML = `<div class="hh">Last ${L.length} <span>revs · result</span></div><div class="hbars">${bars}</div>`;
   }
 
   // ---- release consistency: repeatability is the #1 separator of good bowlers (mechanics doc §4) ----
@@ -219,7 +233,7 @@
   $("#reportBtn") && $("#reportBtn").addEventListener("click", openReport);
   $("#reportClose") && $("#reportClose").addEventListener("click", () => { $("#reportCard").hidden = true; });
   $("#reportDone") && $("#reportDone").addEventListener("click", () => { $("#reportCard").hidden = true; });
-  $("#reportClear") && $("#reportClear").addEventListener("click", () => { resetStats(); $("#pstats").innerHTML = ""; $("#telemetry").innerHTML = emptyTelemetry(); renderConsistency(); streak = 0; $("#reportCard").hidden = true; });
+  $("#reportClear") && $("#reportClear").addEventListener("click", () => { resetStats(); $("#pstats").innerHTML = ""; $("#telemetry").innerHTML = emptyTelemetry(); renderHistory(); renderConsistency(); streak = 0; $("#reportCard").hidden = true; });
 
   // ---------------------------------------------------------------- 10-frame scoring (game)
   function makePlayers(n) { players = []; for (let i = 0; i < n; i++) players.push({ name: "Player " + (i + 1), frames: Array.from({ length: 10 }, () => ({ rolls: [] })) }); }
@@ -299,7 +313,7 @@
     setStatus(local ? "wait" : "on", local ? "throwing solo" : "phone's on — wind up");
     showBowler();
     standing = new Array(10).fill(true); gameOver = false; busy = false;
-    if (mode === "practice") { resetStats(); $("#telemetry").innerHTML = emptyTelemetry(); $("#pstats").innerHTML = ""; renderConsistency(); }
+    if (mode === "practice") { resetStats(); $("#telemetry").innerHTML = emptyTelemetry(); $("#pstats").innerHTML = ""; renderHistory(); renderConsistency(); }
     else { makePlayers(playerCount); cur = { p: 0, f: 0 }; }
     requestAnimationFrame(() => { initLane(); A3D.resize(); if (mode === "game") readyTurn(); else ballReturn(); });
     if (local) enableLocal();
