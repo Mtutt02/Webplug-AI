@@ -51,24 +51,29 @@
   $("#optGo") && $("#optGo").addEventListener("click", () => { SFX.resume(); openLane(); });
 
   // ---------------------------------------------------------------- pairing
-  let pairCode = null, ctlMode = "phone", camSeparate = false;   // phone controller vs hand/camera; camSeparate = camera on another device
+  // camera default = SPLIT (phone watches your hand, this screen is the lane) — smooth on any machine.
+  // single-screen camera (lane + webcam on one device) is an opt-in; it needs a powerful computer.
+  let pairCode = null, ctlMode = "phone", camThisScreen = false;
   function renderPair() {
-    const cam = ctlMode === "camera";
+    const cam = ctlMode === "camera", split = cam && !camThisScreen;
     const base = location.origin + (cam ? "/bowl/camera" : "/bowl/play");
-    $("#camStart").hidden = !cam;
-    $("#phonePair").hidden = cam && !camSeparate;           // camera on this screen hides the QR path
-    $("#pairEyebrow").textContent = cam ? (camSeparate ? "Scan on a laptop or propped phone that sees your hand" : "Bowl with your hand — right on this screen") : "Scan it — your phone's the ball now";
+    $("#phonePair").hidden = cam && camThisScreen;          // show the QR for phone-ball and camera-split
+    $("#camSplitNote").hidden = !split;
+    $("#camStart").hidden = !(cam && camThisScreen);
+    $("#pairEyebrow").textContent = !cam ? "Scan it — your phone's the ball now"
+      : split ? "Point your phone's camera at your throwing hand" : "Bowl with your hand — right on this screen";
     $("#joinHost").textContent = base.replace(/^https?:\/\//, "");
-    $("#pairHelp").textContent = cam
-      ? "No phone to hold — your bare hand is the ball. Fist to grab, swing, flick your fingers open to let go."
-      : "Swing your phone like the ball — tilt to aim, flick your wrist to hook.";
+    $("#pairHelp").textContent = !cam ? "Swing your phone like the ball — tilt to aim, flick your wrist to hook."
+      : split ? "Prop your phone so its camera sees your hand and scan — it tracks you, this screen stays the lane. Fist to grab, flick open to throw."
+      : "This one device is both the lane and the camera. Fist to grab, flick your fingers open to throw.";
     $("#qr").innerHTML = "";
     if (pairCode && !$("#phonePair").hidden) { try { new QRCode($("#qr"), { text: base + "#" + pairCode, width: 168, height: 168, colorDark: "#0a0c12", colorLight: "#fff", correctLevel: QRCode.CorrectLevel.M }); } catch (_) {} }
   }
   document.querySelectorAll("#ctlPick [data-ctl]").forEach((b) => b.addEventListener("click", () => {
-    ctlMode = b.dataset.ctl; camSeparate = false; document.querySelectorAll("#ctlPick button").forEach((x) => x.classList.toggle("sel", x === b)); renderPair();
+    ctlMode = b.dataset.ctl; camThisScreen = false; document.querySelectorAll("#ctlPick button").forEach((x) => x.classList.toggle("sel", x === b)); renderPair();
   }));
-  $("#camOther") && $("#camOther").addEventListener("click", (e) => { e.preventDefault(); camSeparate = true; renderPair(); });
+  $("#useThisScreen") && $("#useThisScreen").addEventListener("click", (e) => { e.preventDefault(); camThisScreen = true; renderPair(); });
+  $("#camOther") && $("#camOther").addEventListener("click", (e) => { e.preventDefault(); camThisScreen = false; renderPair(); });
   $("#camStartBtn") && $("#camStartBtn").addEventListener("click", () => startCameraLocal());
   function stopCam() { if (camCtrl) { try { camCtrl.stop(); } catch (_) {} } camCtrl = null; camLocal = false; if ($("#camPip")) $("#camPip").hidden = true; if (A3D.setQuality) A3D.setQuality("full"); }
   function openLane() {
