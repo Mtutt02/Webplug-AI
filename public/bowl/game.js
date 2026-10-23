@@ -98,8 +98,8 @@
     let camReady = false;
     camCtrl = await window.StrikeHands.start($("#camVideo"), $("#camCanvas"), {
       getHand: () => bowler.hand,
-      onAim: (board, locked) => { if (!busy) A3D.aimBall((20 - board) / 19); $("#cpState").textContent = (locked ? "🔒 board " : "aim · board ") + board; },
-      onHand: (t) => { if (t === "—") $("#cpState").textContent = "show your hand"; else if (t === "ball in hand") $("#cpState").textContent = "ball in hand — swing!"; },
+      onAim: (board, locked) => { if (!busy) A3D.aimBall((20 - board) / 19); $("#cpState").textContent = locked ? "✊ grabbed — flick open!" : "board " + board + " · ✊ to grab"; },
+      onHand: (t) => { if (t === "—") $("#cpState").textContent = "show your hand"; else if (t === "ball in hand") $("#cpState").textContent = "✊ flick open to throw!"; },
       onThrow: (shot) => { if (!busy) { throwShot(Object.assign({ ballId: bowler.ballId, hand: bowler.hand }, shot)); $("#cpState").textContent = "rolling…"; } },
       onState: (t) => { if (!camReady) $("#cpState").textContent = t; },
       onReady: () => { camReady = true; setStatus("on", "camera on — bowl!"); $("#cpState").textContent = "show your hand"; },

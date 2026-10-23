@@ -8,7 +8,7 @@
  * The live game itself needs a connection (it is realtime); the shell cache is
  * so the installed icon opens to a real screen instead of a browser error.
  */
-const VERSION = "strikecast-v15";
+const VERSION = "strikecast-v16";
 const SHELL = `shell-${VERSION}`;
 const CORE = [
   "/bowl/",

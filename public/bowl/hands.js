@@ -20,10 +20,11 @@
   const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
   const K = {
     AIM_RANGE: 0.42,      // how far your open hand sweeps = the whole lane
-    FIST: 0.70,           // mean finger curl below this = fist (ball held)
-    OPEN: 1.00,           // above this = fingers extended (released)
-    SWING_SPEED: 0.9,     // peak hand speed (frame-heights/s) that counts as a swing
+    FIST: 0.82,           // mean finger curl below this = fist (ball held) — loose enough for a relaxed grab
+    OPEN: 1.05,           // above this = fingers extended (released)
+    SPEED_FULL: 1.3,      // hand speed that maps to a full-power throw (lower = easier to throw hard)
     REV_K: 3.4,           // degrees of wrist turn through release → revs
+    DWELL: 0.12,          // s you must hold the fist before an open counts as a throw (debounce)
     MIN_MPH: 12, MAX_MPH: 20,
     COOLDOWN: 1200,       // ms between throws
     MISS_TOL: 6,          // frames we coast on the last hand before "show your hand"
@@ -111,7 +112,7 @@
     opts.onState && opts.onState("Open hand = aim · fist = grab the ball · swing & flick open to throw");
 
     let state = "aim", aimBase = null, stanceBoard = 20, lastStanceSent = 0, lastThrow = 0;
-    let peakSpeed = 0, gripTheta = 0, aimAtGrip = 20, hist = [], smoothGrip = 1.1, sx = 0, sy = 0, sInit = false, miss = 0, lastLm = null;
+    let peakSpeed = 0, gripTheta = 0, aimAtGrip = 20, gripStartT = 0, hist = [], smoothGrip = 1.1, sx = 0, sy = 0, sInit = false, miss = 0, lastLm = null;
 
     function loop() {
       if (!running) return; raf = requestAnimationFrame(loop);
@@ -149,22 +150,26 @@
           opts.onAim && opts.onAim(stanceBoard, false);
           if (opts.onStance && now - lastStanceSent > 80) { lastStanceSent = now; opts.onStance(stanceBoard); }
         }
-        if (grip) { state = "hold"; peakSpeed = 0; gripTheta = theta; aimAtGrip = stanceBoard; opts.onAim && opts.onAim(aimAtGrip, true); }
+        if (grip) { state = "hold"; peakSpeed = 0; gripTheta = theta; aimAtGrip = stanceBoard; gripStartT = now; opts.onAim && opts.onAim(aimAtGrip, true); }
       } else {
         opts.onHand && opts.onHand("ball in hand");
-        opts.onState && opts.onState("swing & flick your fingers open");
+        opts.onState && opts.onState("flick your fingers open to throw");
         if (speed > peakSpeed) peakSpeed = speed;
-        if (now - lastThrow > K.COOLDOWN && open && peakSpeed > K.SWING_SPEED) {
+        const held = (now - gripStartT) / 1000;
+        // RELEASE = you open your fingers after the grab (the ball rolling off your hand). No big swing
+        // required — power scales with whatever motion there was, so a seated flick throws soft, a full
+        // swing throws hard. (docs/bowling-swing-mechanics.md §5B)
+        if (now - lastThrow > K.COOLDOWN && open && held > K.DWELL) {
           lastThrow = now;
           let dT = theta - gripTheta; while (dT > Math.PI) dT -= 2 * Math.PI; while (dT < -Math.PI) dT += 2 * Math.PI;
           const turnDeg = Math.abs(dT) * DEG;
-          const speedMph = clamp(K.MIN_MPH + (peakSpeed - K.SWING_SPEED) * 4.5, K.MIN_MPH, K.MAX_MPH);
+          const speedMph = clamp(K.MIN_MPH + Math.min(1, peakSpeed / K.SPEED_FULL) * (K.MAX_MPH - K.MIN_MPH), K.MIN_MPH, K.MAX_MPH);
           const rev = clamp(Math.round(100 + turnDeg * K.REV_K), 90, 560);
           const drift = hist.length ? (hx - hist[0].x) : 0;
           const ang = clamp(drift * 12 * -getHand(), -4, 4);
           opts.onThrow && opts.onThrow({ launchBoard: aimAtGrip, launchAngle: ang, speedMph, revRate: rev });
           state = "aim"; aimBase = hx;
-        } else if (open && peakSpeed <= K.SWING_SPEED) { state = "aim"; }
+        }
       }
     }
     raf = requestAnimationFrame(loop);
