@@ -5,6 +5,7 @@
     { "source": "/bowl/camera", "destination": "/bowl/camera.html" },
     { "source": "/bowl/play", "destination": "/bowl/play.html" },
     { "source": "/bowl/tv", "destination": "/bowl/tv.html" },
+    { "source": "/bowl/diag", "destination": "/bowl/diag.html" },
     { "source": "/bowl/privacy", "destination": "/bowl/privacy.html" }
   ]
 }
