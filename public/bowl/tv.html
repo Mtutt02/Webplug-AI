@@ -210,6 +210,12 @@
 <script src="/bowl/balls.js"></script>
 <script src="/bowl/render3d.js"></script>
 <script src="/bowl/net.js"></script>
+<script type="module">
+  // load MediaPipe tasks-vision up front (static import = most compatible) and hand it to hands.js
+  import * as TasksVision from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.12";
+  window.__TasksVision = TasksVision;
+  window.dispatchEvent(new Event("tasksvision-ready"));
+</script>
 <script src="/bowl/hands.js"></script>
 <script src="/bowl/game.js"></script>
 <script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("/bowl/sw.js").catch(() => {});</script>

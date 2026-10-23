@@ -54,26 +54,58 @@
     return hands[bi];
   }
 
+  function withTimeout(p, ms, label) {
+    return Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error(label || "timed out")), ms))]);
+  }
+  // prefer the module loaded by the page's <script type=module> shim; fall back to a dynamic import
+  async function waitForTasksVision() {
+    if (window.__TasksVision) return window.__TasksVision;
+    const viaEvent = await new Promise((resolve) => {
+      let done = false;
+      const fin = () => { if (!done) { done = true; resolve(window.__TasksVision || null); } };
+      window.addEventListener("tasksvision-ready", fin, { once: true });
+      if (window.__TasksVision) fin();
+      setTimeout(fin, 8000);
+    });
+    if (viaEvent) return viaEvent;
+    try { return await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.12"); } catch (_) { return null; }
+  }
+
   async function start(video, canvas, opts) {
     opts = opts || {};
     const getHand = opts.getHand || (() => 1);
     const octx = canvas.getContext("2d");
     let hl = null, raf = 0, running = false;
 
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { opts.onError && opts.onError("This browser can't use the camera. Try Chrome or Safari, or use the phone controller."); return null; }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } }, audio: false });
       video.srcObject = stream; await video.play();
-    } catch (e) { opts.onError && opts.onError("Camera blocked — allow camera access and reload."); return null; }
+    } catch (e) {
+      const n = (e && e.name) || "";
+      const msg = n === "NotAllowedError" || n === "SecurityError" ? "Camera blocked — allow camera access, then reload."
+        : n === "NotFoundError" || n === "OverconstrainedError" || n === "DevicesNotFoundError" ? "No camera on this device — use the phone controller instead."
+        : n === "NotReadableError" ? "Camera is busy in another app — close it and reload."
+        : "Couldn't start the camera (" + (n || "unknown") + "). Try reloading.";
+      opts.onError && opts.onError(msg); return null;
+    }
 
     opts.onState && opts.onState("loading hand tracker…");
     try {
-      const mod = await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.12");
+      // use the tasks-vision module loaded via a static <script type=module> shim (robust cross-browser),
+      // falling back to a dynamic import if the shim hasn't run.
+      const mod = await waitForTasksVision();
+      if (!mod) throw new Error("tasks-vision unavailable");
       const vision = await mod.FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.12/wasm");
-      hl = await mod.HandLandmarker.createFromOptions(vision, {
+      hl = await withTimeout(mod.HandLandmarker.createFromOptions(vision, {
         baseOptions: { modelAssetPath: "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task" },
         runningMode: "VIDEO", numHands: 2,
-      });
-    } catch (e) { opts.onError && opts.onError("Couldn't load the hand tracker (network?)."); return null; }
+      }), 30000, "model load timed out");
+    } catch (e) {
+      const slow = /timed out/.test((e && e.message) || "");
+      opts.onError && opts.onError(slow ? "Hand tracker is taking too long — check your connection and reload." : "Couldn't load the hand tracker — check your connection and reload.");
+      return null;
+    }
 
     running = true; opts.onReady && opts.onReady();
     opts.onState && opts.onState("Open hand = aim · fist = grab the ball · swing & flick open to throw");

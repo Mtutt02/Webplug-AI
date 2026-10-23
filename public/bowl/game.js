@@ -95,14 +95,17 @@
     const pip = $("#camPip"); if (pip) pip.hidden = false;
     $("#cpHand").textContent = bowler.hand > 0 ? "RH" : "LH";
     setStatus("wait", "starting camera…"); $("#cpState").textContent = "starting camera…";
+    let camReady = false;
     camCtrl = await window.StrikeHands.start($("#camVideo"), $("#camCanvas"), {
       getHand: () => bowler.hand,
       onAim: (board, locked) => { if (!busy) A3D.aimBall((20 - board) / 19); $("#cpState").textContent = (locked ? "🔒 board " : "aim · board ") + board; },
       onHand: (t) => { if (t === "—") $("#cpState").textContent = "show your hand"; else if (t === "ball in hand") $("#cpState").textContent = "ball in hand — swing!"; },
       onThrow: (shot) => { if (!busy) { throwShot(Object.assign({ ballId: bowler.ballId, hand: bowler.hand }, shot)); $("#cpState").textContent = "rolling…"; } },
-      onReady: () => { setStatus("on", "camera on — bowl!"); $("#cpState").textContent = "show your hand"; },
-      onError: (m) => { $("#cpState").textContent = m; setStatus("off", "camera blocked"); },
+      onState: (t) => { if (!camReady) $("#cpState").textContent = t; },
+      onReady: () => { camReady = true; setStatus("on", "camera on — bowl!"); $("#cpState").textContent = "show your hand"; },
+      onError: (m) => { $("#cpState").textContent = m; setStatus("off", "camera couldn't start"); },
     });
+    if (!camCtrl) { $("#camPip").classList.add("err"); }   // failed — the PiP shows why
   }
   $("#cpHand") && $("#cpHand").addEventListener("click", () => { bowler.hand = -bowler.hand; $("#cpHand").textContent = bowler.hand > 0 ? "RH" : "LH"; showBowler(); });
   $("#cpClose") && $("#cpClose").addEventListener("click", () => { stopCam(); local = false; show("home"); });

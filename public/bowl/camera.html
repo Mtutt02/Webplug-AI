@@ -81,6 +81,11 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="/bowl/balls.js"></script>
 <script src="/bowl/net.js"></script>
+<script type="module">
+  import * as TasksVision from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.12";
+  window.__TasksVision = TasksVision;
+  window.dispatchEvent(new Event("tasksvision-ready"));
+</script>
 <script src="/bowl/hands.js"></script>
 <script>
 (function () {
