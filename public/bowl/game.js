@@ -25,7 +25,7 @@
   let bowler = { ballId: "solid", hand: 1 };
   const ballOf = (id) => SB.BALLS.find((b) => b.id === id) || SB.BALLS[3];
   let stats = null;
-  const resetStats = () => (stats = { shots: 0, strikes: 0, spares: 0, pocket: 0, sumBoard: 0, sumAngle: 0, sumMph: 0, sumRev: 0 });
+  const resetStats = () => (stats = { shots: 0, strikes: 0, spares: 0, pocket: 0, sumBoard: 0, sumAngle: 0, sumMph: 0, sumRev: 0, log: [], bestStreak: 0 });
   let players = [], cur = { p: 0, f: 0 }, standing = new Array(10).fill(true), gameOver = false, busy = false;
   let streak = 0;   // strikes in a row — a double, then a turkey, then you're bagging them
 
@@ -116,8 +116,9 @@
       const pocket = Math.abs(r.entryBoard - (r.hand > 0 ? 18 : 22)) <= 2 && !r.gutter;
       if (pocket) stats.pocket++;
       if (res.count === 10 && firstBallFresh) stats.strikes++;
-      updateTelemetry(r, res, leave, pocket); renderPracticeStats();
-      if (res.count === 10 && firstBallFresh) { toast(strikeCall(), ""); SFX.cheer(); A3D.cheer(); }
+      stats.log.push({ mph: r.speedMph, rev: r.revRate, board: r.gutter ? null : r.entryBoard, angle: r.entryAngle, pocket, gutter: !!r.gutter, strike: res.count === 10 && firstBallFresh });
+      updateTelemetry(r, res, leave, pocket); renderPracticeStats(); renderConsistency();
+      if (res.count === 10 && firstBallFresh) { toast(strikeCall(), ""); stats.bestStreak = Math.max(stats.bestStreak, streak); SFX.cheer(); A3D.cheer(); }
       else { streak = 0; if (r.gutter) toast("Straight in the ditch", "spare", 1100); }
       setTimeout(() => { if (mode === "practice") { standing = new Array(10).fill(true); ballReturn(); } }, 1800);
     } else advanceGame(res.count, leave);
@@ -161,6 +162,64 @@
       ["Avg entry", (s.sumBoard / s.shots).toFixed(1) + " bd"], ["Avg angle", (s.sumAngle / s.shots).toFixed(1) + "°"], ["Avg speed", (s.sumMph / s.shots).toFixed(1) + " mph"]]
       .map(([k, v]) => `<div class="stat"><div class="sv">${v}</div><div class="sk">${k}</div></div>`).join("");
   }
+
+  // ---- release consistency: repeatability is the #1 separator of good bowlers (mechanics doc §4) ----
+  const mean = (a) => a.reduce((x, v) => x + v, 0) / a.length;
+  const stdev = (a) => { if (a.length < 2) return 0; const m = mean(a); return Math.sqrt(a.reduce((x, v) => x + (v - m) * (v - m), 0) / a.length); };
+  const sdScore = (sd, good, bad) => clamp(Math.round(100 * (bad - sd) / (bad - good)), 0, 100);
+  function consistency() {
+    const L = stats.log; if (L.length < 3) return null;
+    const speeds = L.map((x) => x.mph), revs = L.map((x) => x.rev), boards = L.filter((x) => x.board != null).map((x) => x.board);
+    const sdMph = stdev(speeds), sdRev = stdev(revs), sdBd = boards.length >= 3 ? stdev(boards) : null;
+    const parts = [sdScore(sdMph, 0.6, 2.5), sdScore(sdRev, 25, 90)];
+    if (sdBd != null) parts.push(sdScore(sdBd, 1.0, 4.5));
+    const score = Math.round(mean(parts));
+    const verdict = score >= 82 ? "Dialed in — your release repeats. That's how you build a game." :
+      score >= 64 ? "Grooving it — getting repeatable. Keep the same finish every ball." :
+      score >= 42 ? "Finding it — tighten up: same speed, same spot, same flick." :
+      "Scattered — slow down and make the exact same motion every shot.";
+    return { n: L.length, mMph: mean(speeds), sdMph, mRev: mean(revs), sdRev, mBd: boards.length ? mean(boards) : null, sdBd, score, verdict };
+  }
+  const scoreColor = (s) => s >= 80 ? "var(--cast)" : s >= 60 ? "#8fd17a" : s >= 40 ? "#e0b44a" : "var(--strike)";
+  function renderConsistency() {
+    const el = $("#pconsist"); if (!el) return;
+    const c = consistency();
+    if (!c) { el.innerHTML = `<div class="ch">Release consistency</div><div class="cmuted">Throw 3+ shots to measure how repeatable your release is.</div>`; return; }
+    const line = c.mBd != null ? `<div class="crow"><span>Line</span><b>board ${c.mBd.toFixed(1)} <i>± ${c.sdBd.toFixed(1)}</i></b></div>` : "";
+    el.innerHTML =
+      `<div class="ch">Release consistency <span class="cscore" style="color:${scoreColor(c.score)}">${c.score}<small>/100</small></span></div>`
+      + `<div class="crow"><span>Speed</span><b>${c.mMph.toFixed(1)} <i>± ${c.sdMph.toFixed(1)}</i> mph</b></div>`
+      + `<div class="crow"><span>Revs</span><b>${Math.round(c.mRev)} <i>± ${Math.round(c.sdRev)}</i> rpm</b></div>`
+      + line
+      + `<div class="cverdict">${esc(c.verdict)}</div>`;
+  }
+
+  // ---- end-of-session report ----
+  function bestRun(s) { return s.bestStreak >= 3 ? s.bestStreak + " strikes in a row 🔥" : s.bestStreak === 2 ? "a double" : s.strikes > 0 ? "a strike" : "—"; }
+  function openReport() {
+    const s = stats, c = consistency(), card = $("#reportCard"); if (!card) return;
+    if (!s || !s.shots) { $("#reportBody").innerHTML = `<div class="rcScore"><div class="v" style="color:var(--muted)">No shots yet — throw a few and check back.</div></div>`; card.hidden = false; return; }
+    const big = `<div class="rcBig">`
+      + `<div class="b"><div class="bv">${s.shots}</div><div class="bk">Shots</div></div>`
+      + `<div class="b"><div class="bv">${Math.round(s.strikes / s.shots * 100)}%</div><div class="bk">Strikes</div></div>`
+      + `<div class="b"><div class="bv">${Math.round(s.pocket / s.shots * 100)}%</div><div class="bk">Pocket</div></div></div>`;
+    const score = c ? `<div class="rcScore"><div class="n" style="color:${scoreColor(c.score)}">${c.score}<small style="font-size:1rem;color:var(--muted)">/100</small></div><div class="v">${esc(c.verdict)}</div></div>`
+      : `<div class="rcScore"><div class="v" style="color:var(--muted)">Throw 3+ shots for a consistency score.</div></div>`;
+    const rows = [
+      ["Avg speed", (s.sumMph / s.shots).toFixed(1) + " mph" + (c ? ` (± ${c.sdMph.toFixed(1)})` : "")],
+      ["Avg revs", Math.round(s.sumRev / s.shots) + " rpm" + (c ? ` (± ${Math.round(c.sdRev)})` : "")],
+      ["Your style", coach(s.sumMph / s.shots, s.sumRev / s.shots).style],
+      ["Avg entry", "board " + (s.sumBoard / s.shots).toFixed(1) + (c && c.mBd != null ? ` (± ${c.sdBd.toFixed(1)})` : "")],
+      ["Avg angle", (s.sumAngle / s.shots).toFixed(1) + "°"],
+      ["Best run", bestRun(s)],
+    ];
+    $("#reportBody").innerHTML = big + score + `<div class="rcList">` + rows.map(([k, v]) => `<div class="r"><span>${k}</span><b>${esc(String(v))}</b></div>`).join("") + `</div>`;
+    card.hidden = false;
+  }
+  $("#reportBtn") && $("#reportBtn").addEventListener("click", openReport);
+  $("#reportClose") && $("#reportClose").addEventListener("click", () => { $("#reportCard").hidden = true; });
+  $("#reportDone") && $("#reportDone").addEventListener("click", () => { $("#reportCard").hidden = true; });
+  $("#reportClear") && $("#reportClear").addEventListener("click", () => { resetStats(); $("#pstats").innerHTML = ""; $("#telemetry").innerHTML = emptyTelemetry(); renderConsistency(); streak = 0; $("#reportCard").hidden = true; });
 
   // ---------------------------------------------------------------- 10-frame scoring (game)
   function makePlayers(n) { players = []; for (let i = 0; i < n; i++) players.push({ name: "Player " + (i + 1), frames: Array.from({ length: 10 }, () => ({ rolls: [] })) }); }
@@ -240,7 +299,7 @@
     setStatus(local ? "wait" : "on", local ? "throwing solo" : "phone's on — wind up");
     showBowler();
     standing = new Array(10).fill(true); gameOver = false; busy = false;
-    if (mode === "practice") { resetStats(); $("#telemetry").innerHTML = emptyTelemetry(); $("#pstats").innerHTML = ""; }
+    if (mode === "practice") { resetStats(); $("#telemetry").innerHTML = emptyTelemetry(); $("#pstats").innerHTML = ""; renderConsistency(); }
     else { makePlayers(playerCount); cur = { p: 0, f: 0 }; }
     requestAnimationFrame(() => { initLane(); A3D.resize(); if (mode === "game") readyTurn(); else ballReturn(); });
     if (local) enableLocal();

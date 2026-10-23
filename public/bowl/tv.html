@@ -55,6 +55,27 @@
   .tv.res{color:var(--strike)}
   .coach{margin-top:10px;padding:10px 12px;background:rgba(50,224,207,.08);border:1px solid var(--ink3);border-left:3px solid var(--cast);border-radius:10px;font-family:var(--fbody);font-size:.82rem;line-height:1.35;color:var(--pin)}
   .stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:16px}
+  .consist{margin-top:16px;background:var(--ink2);border:1px solid var(--ink3);border-radius:12px;padding:12px}
+  .consist .ch{font-family:var(--fmono);font-size:.7rem;letter-spacing:.14em;text-transform:uppercase;color:var(--cast);display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px}
+  .consist .cscore{font-family:var(--fdisp);font-size:1.5rem;line-height:1}.consist .cscore small{font-size:.62rem;color:var(--muted)}
+  .consist .crow{display:flex;justify-content:space-between;align-items:baseline;padding:4px 0;font-family:var(--fbody);font-size:.86rem}
+  .consist .crow span{color:var(--muted);font-family:var(--fmono);font-size:.72rem}
+  .consist .crow b{font-weight:700;font-variant-numeric:tabular-nums}.consist .crow i{color:var(--muted);font-style:normal;font-size:.82em}
+  .consist .cverdict{margin-top:8px;font-size:.82rem;line-height:1.35;color:var(--pin)}
+  .consist .cmuted{color:var(--muted);font-size:.82rem;line-height:1.35}
+  #reportBtn{margin-top:12px;width:100%}
+  .reportCard{position:absolute;inset:0;background:rgba(6,8,13,.84);display:grid;place-items:center;z-index:6;padding:20px}
+  .reportCard[hidden]{display:none}
+  .rcInner{background:var(--ink2);border:1px solid var(--ink3);border-radius:20px;padding:22px;max-width:460px;width:100%;max-height:92%;overflow-y:auto}
+  .rcHead{display:flex;justify-content:space-between;align-items:center;font-family:var(--fdisp);font-size:1.5rem;text-transform:uppercase;margin-bottom:14px}
+  .rcHead button{background:none;border:none;color:var(--muted);font-size:1.3rem;cursor:pointer;line-height:1}
+  .rcBig{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px}
+  .rcBig .b{background:var(--ink);border:1px solid var(--ink3);border-radius:12px;padding:12px 8px;text-align:center}
+  .rcBig .bv{font-family:var(--fdisp);font-size:1.7rem}.rcBig .bk{font-family:var(--fmono);font-size:.56rem;letter-spacing:.1em;color:var(--muted);text-transform:uppercase}
+  .rcScore{text-align:center;margin-bottom:12px}.rcScore .n{font-family:var(--fdisp);font-size:3rem;line-height:1}.rcScore .v{font-size:.9rem;color:var(--pin);line-height:1.35;margin-top:4px}
+  .rcList .r{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--ink3);font-family:var(--fbody);font-size:.9rem}
+  .rcList .r span{color:var(--muted);font-family:var(--fmono);font-size:.72rem}.rcList .r b{font-variant-numeric:tabular-nums}
+  .rcBtns{display:flex;gap:10px;margin-top:16px}.rcBtns .btn{flex:1}
   .stat{background:var(--ink2);border:1px solid var(--ink3);border-radius:12px;padding:10px 8px;text-align:center}
   .sv{font-family:var(--fdisp);font-size:1.2rem}.sk{font-family:var(--fmono);font-size:.6rem;letter-spacing:.1em;color:var(--muted);text-transform:uppercase}
   .toast{position:absolute;left:40%;top:38%;transform:translate(-50%,-50%) scale(.6);opacity:0;font-family:var(--fdisp);font-size:clamp(3rem,10vw,6rem);text-transform:uppercase;color:var(--strike);text-shadow:0 0 50px rgba(255,90,44,.6);pointer-events:none;transition:all .35s cubic-bezier(.2,1.4,.4,1);z-index:5}
@@ -142,9 +163,18 @@
       <h3>Shot telemetry</h3>
       <div id="telemetry"></div>
       <div class="stats" id="pstats"></div>
+      <div class="consist" id="pconsist"></div>
+      <button class="btn ghost" id="reportBtn">📋 Session report</button>
     </aside>
   </div>
   <div class="toast" id="toast">STRIKE!</div>
+  <div class="reportCard" id="reportCard" hidden>
+    <div class="rcInner">
+      <div class="rcHead"><span>Session report</span><button id="reportClose" aria-label="Close">✕</button></div>
+      <div id="reportBody"></div>
+      <div class="rcBtns"><button class="btn ghost" id="reportClear">Clear session</button><button class="btn primary" id="reportDone">Keep throwing</button></div>
+    </div>
+  </div>
   <div class="board" id="boardWrap" hidden><table id="board"></table></div>
 </section>
 
