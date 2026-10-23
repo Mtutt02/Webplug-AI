@@ -70,7 +70,7 @@
   }));
   $("#camOther") && $("#camOther").addEventListener("click", (e) => { e.preventDefault(); camSeparate = true; renderPair(); });
   $("#camStartBtn") && $("#camStartBtn").addEventListener("click", () => startCameraLocal());
-  function stopCam() { if (camCtrl) { try { camCtrl.stop(); } catch (_) {} } camCtrl = null; camLocal = false; if ($("#camPip")) $("#camPip").hidden = true; }
+  function stopCam() { if (camCtrl) { try { camCtrl.stop(); } catch (_) {} } camCtrl = null; camLocal = false; if ($("#camPip")) $("#camPip").hidden = true; if (A3D.setQuality) A3D.setQuality("full"); }
   function openLane() {
     show("pair"); stopCam(); local = false;
     net = window.StrikeNet ? window.StrikeNet.host() : null;
@@ -92,6 +92,7 @@
     local = true; camLocal = true;
     if (net) { try { net.destroy(); } catch (_) {} net = null; }
     startLane();
+    if (A3D.setQuality) A3D.setQuality("lite");    // same device runs the webcam tracker — lighten the render
     const pip = $("#camPip"); if (pip) pip.hidden = false;
     $("#cpHand").textContent = bowler.hand > 0 ? "RH" : "LH";
     setStatus("wait", "starting camera…"); $("#cpState").textContent = "starting camera…";

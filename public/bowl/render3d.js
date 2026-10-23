@@ -20,7 +20,18 @@
   let crowd = null, sweep = null, sweepAnim = null, scoreboard = null, pinLight = null, booted = false;
   let reflector = null, rackAnim = null;
   let trail = null, trailPos = [], flashes = [], shake = 0, exposurePulse = 0;
+  let key = null, lite = false;
   const TRAIL_N = 26;
+
+  // drop the heaviest effects (planar reflector = a 2nd full scene render/frame, soft shadows, hi-DPI)
+  // so the lane stays smooth when the SAME device is also running the webcam hand-tracker.
+  function setQuality(mode) {
+    lite = (mode === "lite");
+    if (reflector) reflector.visible = !lite;
+    if (renderer) { renderer.shadowMap.enabled = !lite; renderer.setPixelRatio(lite ? 1 : Math.min(2, global.devicePixelRatio || 1)); }
+    if (key) key.castShadow = !lite;
+    if (pinLight) pinLight.castShadow = false;   // spotlight never cast shadows; keep it cheap
+  }
 
   // ---- planar reflector (real mirror via a render target + mirrored virtual camera) ----
   // compact adaptation of three's examples Reflector, driven by the global THREE, tuned
@@ -344,7 +355,7 @@
 
     // soft sky/ground ambient instead of flat fill
     scene.add(new T.HemisphereLight(0x9fb4da, 0x161a24, 0.85));
-    const key = new T.DirectionalLight(0xfff0e0, 1.25); key.position.set(4, 16, 10); key.castShadow = true;
+    key = new T.DirectionalLight(0xfff0e0, 1.25); key.position.set(4, 16, 10); key.castShadow = true;
     key.shadow.mapSize.set(2048, 2048); key.shadow.bias = -0.0004;
     key.shadow.camera.left = -8; key.shadow.camera.right = 8; key.shadow.camera.top = 6; key.shadow.camera.bottom = -70; key.shadow.camera.far = 120;
     scene.add(key);
@@ -535,5 +546,5 @@
     renderer.render(scene, cam);
   }
 
-  global.Arena3D = { init, resetRack, setStanding, placeBall, deliverBall, aimBall, rollBall, tumble, showReturn, resize, camSet, cheer, PINS };
+  global.Arena3D = { init, resetRack, setStanding, placeBall, deliverBall, aimBall, rollBall, tumble, showReturn, resize, camSet, cheer, setQuality, PINS };
 })(window);

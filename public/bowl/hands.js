@@ -20,11 +20,13 @@
   const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
   const K = {
     AIM_RANGE: 0.42,      // how far your open hand sweeps = the whole lane
-    FIST: 0.82,           // mean finger curl below this = fist (ball held) — loose enough for a relaxed grab
-    OPEN: 1.05,           // above this = fingers extended (released)
+    FIST: 0.72,           // enter "holding the ball" when the mean finger curl drops below this
+    FIST_CONFIRM: 0.60,   // ...but only count a throw if the fist actually closed this tight (kills noise)
+    OPEN: 1.10,           // above this = fingers clearly extended (released)
+    FIST_FRAMES: 3,       // consecutive fist frames required to grab (debounce the detector)
     SPEED_FULL: 1.3,      // hand speed that maps to a full-power throw (lower = easier to throw hard)
     REV_K: 3.4,           // degrees of wrist turn through release → revs
-    DWELL: 0.12,          // s you must hold the fist before an open counts as a throw (debounce)
+    DWELL: 0.20,          // s you must hold the fist before an open counts as a throw
     MIN_MPH: 12, MAX_MPH: 20,
     COOLDOWN: 1200,       // ms between throws
     MISS_TOL: 6,          // frames we coast on the last hand before "show your hand"
@@ -113,6 +115,7 @@
 
     let state = "aim", aimBase = null, stanceBoard = 20, lastStanceSent = 0, lastThrow = 0;
     let peakSpeed = 0, gripTheta = 0, aimAtGrip = 20, gripStartT = 0, hist = [], smoothGrip = 1.1, sx = 0, sy = 0, sInit = false, miss = 0, lastLm = null;
+    let fistCount = 0, minGrip = 2, sawOpen = false;   // sawOpen: you must show an open hand before a grab counts
 
     function loop() {
       if (!running) return; raf = requestAnimationFrame(loop);
@@ -142,24 +145,29 @@
 
       if (state === "aim") {
         opts.onHand && opts.onHand(grip ? "grabbing" : "open");
-        opts.onState && opts.onState("aim — move your hand, then make a fist");
+        opts.onState && opts.onState("open hand = aim · make a fist to grab");
         if (aimBase == null) aimBase = hx;
         if (open) {
+          sawOpen = true;                                  // a clear open hand must precede a grab
           const off = (hx - aimBase) / K.AIM_RANGE;
           stanceBoard = Math.round(clamp(20 - off * 18, 2, 38));
           opts.onAim && opts.onAim(stanceBoard, false);
           if (opts.onStance && now - lastStanceSent > 80) { lastStanceSent = now; opts.onStance(stanceBoard); }
         }
-        if (grip) { state = "hold"; peakSpeed = 0; gripTheta = theta; aimAtGrip = stanceBoard; gripStartT = now; opts.onAim && opts.onAim(aimAtGrip, true); }
+        fistCount = grip ? fistCount + 1 : 0;
+        // grab only after a clear open, with the fist held a few frames (so detector noise can't grab+throw)
+        if (grip && sawOpen && fistCount >= K.FIST_FRAMES) { state = "hold"; peakSpeed = 0; gripTheta = theta; aimAtGrip = stanceBoard; gripStartT = now; minGrip = smoothGrip; opts.onAim && opts.onAim(aimAtGrip, true); }
       } else {
         opts.onHand && opts.onHand("ball in hand");
         opts.onState && opts.onState("flick your fingers open to throw");
         if (speed > peakSpeed) peakSpeed = speed;
+        if (smoothGrip < minGrip) minGrip = smoothGrip;
         const held = (now - gripStartT) / 1000;
         // RELEASE = you open your fingers after the grab (the ball rolling off your hand). No big swing
         // required — power scales with whatever motion there was, so a seated flick throws soft, a full
         // swing throws hard. (docs/bowling-swing-mechanics.md §5B)
-        if (now - lastThrow > K.COOLDOWN && open && held > K.DWELL) {
+        // throw only if a REAL fist happened (minGrip tight) and you then clearly open it
+        if (now - lastThrow > K.COOLDOWN && open && held > K.DWELL && minGrip < K.FIST_CONFIRM) {
           lastThrow = now;
           let dT = theta - gripTheta; while (dT > Math.PI) dT -= 2 * Math.PI; while (dT < -Math.PI) dT += 2 * Math.PI;
           const turnDeg = Math.abs(dT) * DEG;
@@ -168,8 +176,8 @@
           const drift = hist.length ? (hx - hist[0].x) : 0;
           const ang = clamp(drift * 12 * -getHand(), -4, 4);
           opts.onThrow && opts.onThrow({ launchBoard: aimAtGrip, launchAngle: ang, speedMph, revRate: rev });
-          state = "aim"; aimBase = hx;
-        }
+          state = "aim"; aimBase = hx; sawOpen = false; fistCount = 0;
+        } else if (open && held > 2.5) { state = "aim"; sawOpen = false; fistCount = 0; }   // bail if it never closed into a real fist
       }
     }
     raf = requestAnimationFrame(loop);
