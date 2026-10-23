@@ -21,7 +21,7 @@
 
   // ---------------------------------------------------------------- settings/state
   let mode = "practice", oilId = "house", playerCount = 1;
-  let net = null, local = false;
+  let net = null, local = false, camLocal = false, camCtrl = null;
   let bowler = { ballId: "solid", hand: 1 };
   const ballOf = (id) => SB.BALLS.find((b) => b.id === id) || SB.BALLS[3];
   let stats = null;
@@ -51,22 +51,28 @@
   $("#optGo") && $("#optGo").addEventListener("click", () => { SFX.resume(); openLane(); });
 
   // ---------------------------------------------------------------- pairing
-  let pairCode = null, ctlMode = "phone";                 // phone controller vs hand/camera
+  let pairCode = null, ctlMode = "phone", camSeparate = false;   // phone controller vs hand/camera; camSeparate = camera on another device
   function renderPair() {
-    const base = location.origin + (ctlMode === "camera" ? "/bowl/camera" : "/bowl/play");
-    $("#pairEyebrow").textContent = ctlMode === "camera" ? "Scan on a laptop or propped phone that sees your hand" : "Scan it — your phone's the ball now";
+    const cam = ctlMode === "camera";
+    const base = location.origin + (cam ? "/bowl/camera" : "/bowl/play");
+    $("#camStart").hidden = !cam;
+    $("#phonePair").hidden = cam && !camSeparate;           // camera on this screen hides the QR path
+    $("#pairEyebrow").textContent = cam ? (camSeparate ? "Scan on a laptop or propped phone that sees your hand" : "Bowl with your hand — right on this screen") : "Scan it — your phone's the ball now";
     $("#joinHost").textContent = base.replace(/^https?:\/\//, "");
-    $("#pairHelp").textContent = ctlMode === "camera"
-      ? "No phone to hold — open it where a camera can see your throwing hand, then bowl a real swing: fist to grab, flick open to let go."
+    $("#pairHelp").textContent = cam
+      ? "No phone to hold — your bare hand is the ball. Fist to grab, swing, flick your fingers open to let go."
       : "Swing your phone like the ball — tilt to aim, flick your wrist to hook.";
     $("#qr").innerHTML = "";
-    if (pairCode) { try { new QRCode($("#qr"), { text: base + "#" + pairCode, width: 168, height: 168, colorDark: "#0a0c12", colorLight: "#fff", correctLevel: QRCode.CorrectLevel.M }); } catch (_) {} }
+    if (pairCode && !$("#phonePair").hidden) { try { new QRCode($("#qr"), { text: base + "#" + pairCode, width: 168, height: 168, colorDark: "#0a0c12", colorLight: "#fff", correctLevel: QRCode.CorrectLevel.M }); } catch (_) {} }
   }
   document.querySelectorAll("#ctlPick [data-ctl]").forEach((b) => b.addEventListener("click", () => {
-    ctlMode = b.dataset.ctl; document.querySelectorAll("#ctlPick button").forEach((x) => x.classList.toggle("sel", x === b)); renderPair();
+    ctlMode = b.dataset.ctl; camSeparate = false; document.querySelectorAll("#ctlPick button").forEach((x) => x.classList.toggle("sel", x === b)); renderPair();
   }));
+  $("#camOther") && $("#camOther").addEventListener("click", (e) => { e.preventDefault(); camSeparate = true; renderPair(); });
+  $("#camStartBtn") && $("#camStartBtn").addEventListener("click", () => startCameraLocal());
+  function stopCam() { if (camCtrl) { try { camCtrl.stop(); } catch (_) {} } camCtrl = null; camLocal = false; if ($("#camPip")) $("#camPip").hidden = true; }
   function openLane() {
-    show("pair");
+    show("pair"); stopCam(); local = false;
     net = window.StrikeNet ? window.StrikeNet.host() : null;
     if (!net) { startLane(); return; }
     net.on("code", (code) => {
@@ -80,6 +86,26 @@
   }
   $("#backHome2") && $("#backHome2").addEventListener("click", () => { if (net) net.destroy(); net = null; show("opt"); });
   $("#skipPair") && $("#skipPair").addEventListener("click", () => { local = true; if (net) net.destroy(); startLane(); });
+
+  // single-screen camera: this device is BOTH the lane and the camera (no phone, no pairing)
+  async function startCameraLocal() {
+    local = true; camLocal = true;
+    if (net) { try { net.destroy(); } catch (_) {} net = null; }
+    startLane();
+    const pip = $("#camPip"); if (pip) pip.hidden = false;
+    $("#cpHand").textContent = bowler.hand > 0 ? "RH" : "LH";
+    setStatus("wait", "starting camera…"); $("#cpState").textContent = "starting camera…";
+    camCtrl = await window.StrikeHands.start($("#camVideo"), $("#camCanvas"), {
+      getHand: () => bowler.hand,
+      onAim: (board, locked) => { if (!busy) A3D.aimBall((20 - board) / 19); $("#cpState").textContent = (locked ? "🔒 board " : "aim · board ") + board; },
+      onHand: (t) => { if (t === "—") $("#cpState").textContent = "show your hand"; else if (t === "ball in hand") $("#cpState").textContent = "ball in hand — swing!"; },
+      onThrow: (shot) => { if (!busy) { throwShot(Object.assign({ ballId: bowler.ballId, hand: bowler.hand }, shot)); $("#cpState").textContent = "rolling…"; } },
+      onReady: () => { setStatus("on", "camera on — bowl!"); $("#cpState").textContent = "show your hand"; },
+      onError: (m) => { $("#cpState").textContent = m; setStatus("off", "camera blocked"); },
+    });
+  }
+  $("#cpHand") && $("#cpHand").addEventListener("click", () => { bowler.hand = -bowler.hand; $("#cpHand").textContent = bowler.hand > 0 ? "RH" : "LH"; showBowler(); });
+  $("#cpClose") && $("#cpClose").addEventListener("click", () => { stopCam(); local = false; show("home"); });
 
   // ---------------------------------------------------------------- 3D lane glue + shot pipeline
   let laneReady = false;
@@ -316,7 +342,7 @@
     if (mode === "practice") { resetStats(); $("#telemetry").innerHTML = emptyTelemetry(); $("#pstats").innerHTML = ""; renderHistory(); renderConsistency(); }
     else { makePlayers(playerCount); cur = { p: 0, f: 0 }; }
     requestAnimationFrame(() => { initLane(); A3D.resize(); if (mode === "game") readyTurn(); else ballReturn(); });
-    if (local) enableLocal();
+    if (local && !camLocal) enableLocal();   // camera drives the throws instead of pointer-drag
   }
   function emptyTelemetry() { return ["Ball speed", "Rev rate", "Launch", "Break point", "Entry board", "Entry angle", "Result"].map((k) => `<div class="trow"><span class="tk">${k}</span><span class="tv">—</span></div>`).join(""); }
 

@@ -81,25 +81,13 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="/bowl/balls.js"></script>
 <script src="/bowl/net.js"></script>
-<script type="module">
-  import { HandLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.12";
+<script src="/bowl/hands.js"></script>
+<script>
+(function () {
+  "use strict";
   const $ = (s) => document.querySelector(s);
-  const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
   const SB = window.StrikeBowl;
-
-  let net = null, hand = 1, ballId = "solid";
-  let stanceBoard = 20, aimBase = null, lastStanceSent = 0, lastThrow = 0;
-
-  // ---- tunables (easy to dial on a real device) ----
-  const K = {
-    AIM_RANGE: 0.42,        // how far your open hand sweeps across the frame = the whole lane
-    FIST: 0.70,             // mean finger curl (fingertip→knuckle ÷ hand size) below this = a fist (ball held)
-    OPEN: 1.00,             // above this = fingers extended (you let go)
-    SWING_SPEED: 0.9,       // peak hand speed (frame-heights/sec) that counts as a real swing
-    REV_K: 3.4,             // degrees of wrist turn through release → revs
-    MIN_MPH: 12, MAX_MPH: 20,
-    COOLDOWN: 1200,         // ms between throws
-  };
+  let net = null, hand = 1, ballId = "solid", ctrl = null;
 
   // ---- connect ----
   const codeIn = $("#codeIn"), connectBtn = $("#connectBtn");
@@ -107,16 +95,17 @@
   codeIn.addEventListener("input", () => { codeIn.value = codeIn.value.toUpperCase().replace(/[^A-Z0-9]/g, ""); connectBtn.disabled = codeIn.value.length !== 4; });
   if (fromHash.length === 4) { codeIn.value = fromHash; connectBtn.disabled = false; }
   connectBtn.addEventListener("click", start);
-  $("#soloBtn").addEventListener("click", async () => { $("#soloBtn").disabled = true; await startCamera(); });   // test with no TV — camera prompts, tracking runs, nothing sent
+  $("#soloBtn").addEventListener("click", async () => { $("#soloBtn").disabled = true; enterCam(); await begin(); });   // test with no TV — camera prompts, tracking runs, nothing sent
 
   function start() {
     const code = codeIn.value; if (code.length !== 4) return;
     connectBtn.disabled = true; $("#cDot").className = "dot wait"; $("#cMsg").textContent = "Finding the lane…";
     net = window.StrikeNet.join(code);
-    net.on("paired", async () => { net.send({ t: "hello", role: "camera" }); net.send({ t: "settings", ballId, hand }); await startCamera(); });
+    net.on("paired", async () => { net.send({ t: "hello", role: "camera" }); net.send({ t: "settings", ballId, hand }); enterCam(); await begin(); });
     net.on("message", () => {});
     net.on("error", () => { $("#cDot").className = "dot off"; $("#cMsg").textContent = "No lane with that code."; connectBtn.disabled = false; });
   }
+  function enterCam() { document.querySelector("#connect").classList.remove("show"); $("#cam").classList.add("show"); buildBalls(); }
 
   // ---- ball/hand ----
   function buildBalls() {
@@ -124,105 +113,28 @@
     $("#ballPick").querySelectorAll(".ballchip").forEach((c) => c.addEventListener("click", () => { ballId = c.dataset.ball; $("#ballPick").querySelectorAll(".ballchip").forEach((x) => x.classList.toggle("sel", x === c)); if (net) net.send({ t: "settings", ballId, hand }); }));
   }
   $("#handBtn").addEventListener("click", () => { hand = -hand; $("#handBtn").textContent = hand > 0 ? "RH" : "LH"; if (net) net.send({ t: "settings", ballId, hand }); });
-  $("#calBtn").addEventListener("click", () => { aimBase = null; });
-  $("#throwBtn").addEventListener("click", () => throwShot(15.5, 320, 0, stanceBoard));
+  $("#calBtn").addEventListener("click", () => { if (ctrl) ctrl.recenter(); });
+  $("#throwBtn").addEventListener("click", () => sendShot({ launchBoard: 20, launchAngle: 0, speedMph: 15.5, revRate: 320 }));
 
-  // ---- camera + hand tracking ----
-  let camRunning = false, handLm = null, video, ov, octx;
-  async function startCamera() {
-    document.querySelector("#connect").classList.remove("show"); $("#cam").classList.add("show");
-    buildBalls();
-    video = $("#video"); ov = $("#ov"); octx = ov.getContext("2d");
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } }, audio: false });
-      video.srcObject = stream; await video.play();
-      $("#camStatus").textContent = "loading hand tracker…";
-    } catch (e) { $("#camStatus").textContent = "Camera blocked — allow camera access and reload."; return; }
-    try {
-      const vision = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.12/wasm");
-      handLm = await HandLandmarker.createFromOptions(vision, {
-        baseOptions: { modelAssetPath: "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task" },
-        runningMode: "VIDEO", numHands: 1,
-      });
-    } catch (e) { $("#camStatus").textContent = "Couldn't load the hand tracker (network?)."; return; }
-    camRunning = true; $("#camStatus").textContent = "Open hand = aim · fist = grab the ball · swing & flick your fingers open to let go";
-    requestAnimationFrame(loop);
+  // ---- hand tracking via the shared StrikeHands module ----
+  async function begin() {
+    ctrl = await window.StrikeHands.start($("#video"), $("#ov"), {
+      getHand: () => hand,
+      onAim: (board, locked) => { $("#rStance").textContent = "board " + board + (locked ? " 🔒" : ""); },
+      onStance: (board) => { if (net) net.send({ t: "stance", board: board }); },
+      onHand: (t) => { $("#rArm").textContent = t; },
+      onThrow: (shot) => sendShot(shot),
+      onState: (t) => { $("#rState").textContent = t; },
+      onReady: () => { $("#camStatus").textContent = "Open hand = aim · fist = grab the ball · swing & flick open to let go"; },
+      onError: (m) => { $("#camStatus").textContent = m; },
+    });
   }
-
-  // gesture state machine: aim (open hand) → hold (fist) → release (fingers fling open at the bottom)
-  // the release is the fingers OPENING — like the ball rolling off them — with a wrist turn for revs,
-  // not a downward chop (docs/bowling-swing-mechanics.md §5B).
-  let state = "aim", peakSpeed = 0, gripTheta = 0, aimAtGrip = 20, hist = [], smoothGrip = 1.1;
-  const DEG = 180 / Math.PI;
-  function loop() {
-    if (!camRunning) return;
-    requestAnimationFrame(loop);
-    if (video.readyState < 2) return;
-    ov.width = video.videoWidth || 640; ov.height = video.videoHeight || 480;
-    let res; try { res = handLm.detectForVideo(video, performance.now()); } catch (e) { return; }
-    octx.clearRect(0, 0, ov.width, ov.height);
-    const now = performance.now();
-    if (!res || !res.landmarks || !res.landmarks.length) { $("#rState").textContent = "show your hand"; $("#rArm").textContent = "—"; hist = []; return; }
-    const lm = res.landmarks[0];
-    drawHand(lm);
-
-    // grip: mean fingertip→knuckle distance ÷ hand size (small = curled fist, large = open hand)
-    const wrist = lm[0], mcp9 = lm[9];
-    const S = Math.hypot(mcp9.x - wrist.x, mcp9.y - wrist.y) || 0.001;
-    let gs = 0; for (const [tip, mcp] of [[8, 5], [12, 9], [16, 13], [20, 17]]) gs += Math.hypot(lm[tip].x - lm[mcp].x, lm[tip].y - lm[mcp].y);
-    gs = gs / 4 / S; smoothGrip = smoothGrip * 0.5 + gs * 0.5;
-    const grip = smoothGrip < K.FIST, open = smoothGrip > K.OPEN;
-    const hx = 1 - wrist.x;                                     // camera mirrored → flip for aim
-    // palm roll across the knuckles (index-MCP 5 → pinky-MCP 17): sweeps as the wrist turns through release
-    const theta = Math.atan2(lm[17].y - lm[5].y, lm[17].x - lm[5].x);
-    // peak hand speed over the swing (any direction — the release finishes forward & up)
-    hist.push({ x: hx, y: wrist.y, t: now }); if (hist.length > 6) hist.shift();
-    let speed = 0; if (hist.length >= 2) { const a = hist[0], b = hist[hist.length - 1]; speed = Math.hypot(b.x - a.x, b.y - a.y) / Math.max(0.001, (b.t - a.t) / 1000); }
-
-    if (state === "aim") {
-      $("#rArm").textContent = grip ? "grabbing" : "open";
-      $("#rState").textContent = "aim — move your hand";
-      if (aimBase == null) aimBase = hx;
-      if (open) {                                              // steer the stance with your open hand
-        const off = (hx - aimBase) / K.AIM_RANGE;
-        stanceBoard = Math.round(clamp(20 - off * 18, 2, 38));
-        $("#rStance").textContent = "board " + stanceBoard;
-        if (net && now - lastStanceSent > 90) { lastStanceSent = now; net.send({ t: "stance", board: stanceBoard }); }
-      }
-      if (grip) { state = "hold"; peakSpeed = 0; gripTheta = theta; aimAtGrip = stanceBoard; $("#rStance").textContent = "board " + aimAtGrip + " 🔒"; }
-    } else {                                                   // "hold" — ball is in your fist
-      $("#rArm").textContent = "ball in hand";
-      $("#rState").textContent = "swing & flick open to throw";
-      if (speed > peakSpeed) peakSpeed = speed;
-      // RELEASE = fingers fling open after a real swing
-      if (now - lastThrow > K.COOLDOWN && open && peakSpeed > K.SWING_SPEED) {
-        lastThrow = now;
-        let dTheta = theta - gripTheta; while (dTheta > Math.PI) dTheta -= 2 * Math.PI; while (dTheta < -Math.PI) dTheta += 2 * Math.PI;
-        const turnDeg = Math.abs(dTheta) * DEG;                // how far the wrist turned through release
-        const speedMph = clamp(K.MIN_MPH + (peakSpeed - K.SWING_SPEED) * 4.5, K.MIN_MPH, K.MAX_MPH);
-        const rev = clamp(Math.round(100 + turnDeg * K.REV_K), 90, 560);   // the turn = the revs
-        const drift = hist.length ? (hx - hist[0].x) : 0;
-        const ang = clamp(drift * 12 * -hand, -4, 4);          // small steer; hook direction follows your hand
-        throwShot(speedMph, rev, ang, aimAtGrip);
-        state = "aim"; aimBase = hx;
-      } else if (open && peakSpeed <= K.SWING_SPEED) { state = "aim"; }     // opened without swinging — put it back
-    }
-  }
-
-  function throwShot(speed, rev, ang, board) {
-    const b = board != null ? board : stanceBoard;
-    if (net) net.send({ t: "shot", ballId, hand, launchBoard: b, launchAngle: ang, speedMph: speed, revRate: rev });
+  function sendShot(shot) {
+    if (net) net.send(Object.assign({ t: "shot", ballId: ballId, hand: hand }, shot));
     const f = $("#flash"); f.classList.add("on"); setTimeout(() => f.classList.remove("on"), 450);
-    $("#camStatus").textContent = `threw: ${speed.toFixed(1)} mph · ${Math.round(rev)} rpm · board ${b}`;
+    $("#camStatus").textContent = `threw: ${shot.speedMph.toFixed(1)} mph · ${Math.round(shot.revRate)} rpm · board ${shot.launchBoard}`;
   }
-
-  // hand skeleton (21 landmarks)
-  const HBONES = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
-  function drawHand(lm) {
-    octx.lineWidth = 4; octx.strokeStyle = "rgba(50,224,207,.85)"; octx.fillStyle = "#ff5a2c";
-    HBONES.forEach(([a, b]) => { octx.beginPath(); octx.moveTo(lm[a].x * ov.width, lm[a].y * ov.height); octx.lineTo(lm[b].x * ov.width, lm[b].y * ov.height); octx.stroke(); });
-    for (let i = 0; i < lm.length; i++) { octx.beginPath(); octx.arc(lm[i].x * ov.width, lm[i].y * ov.height, 5, 0, 7); octx.fill(); }
-  }
+})();
 </script>
 </body>
 </html>

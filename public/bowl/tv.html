@@ -13,6 +13,7 @@
 <link rel="stylesheet" href="/bowl/app.css">
 <style>
   html,body{overflow:hidden}
+  [hidden]{display:none!important}
   .screen{position:fixed;inset:0;display:none;flex-direction:column}
   .screen.show{display:flex}
   #home,#opt,#pair{align-items:center;justify-content:center;padding:24px}
@@ -82,6 +83,13 @@
   .rcList .r{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--ink3);font-family:var(--fbody);font-size:.9rem}
   .rcList .r span{color:var(--muted);font-family:var(--fmono);font-size:.72rem}.rcList .r b{font-variant-numeric:tabular-nums}
   .rcBtns{display:flex;gap:10px;margin-top:16px}.rcBtns .btn{flex:1}
+  .campip{position:absolute;left:16px;bottom:16px;width:min(30vw,240px);aspect-ratio:4/3;border-radius:14px;overflow:hidden;border:1px solid var(--ink3);background:#000;z-index:5;box-shadow:0 10px 40px rgba(0,0,0,.5)}
+  .campip[hidden]{display:none}
+  .campip video,.campip canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}
+  .campip .cpbar{position:absolute;left:0;right:0;bottom:0;display:flex;align-items:center;gap:8px;padding:6px 8px;background:linear-gradient(transparent,rgba(6,8,13,.85));font-family:var(--fmono);font-size:.66rem}
+  .campip .cpbar span{flex:1;color:var(--cast);text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .campip .cpbar button{background:var(--ink2);border:1px solid var(--ink3);color:var(--pin);border-radius:8px;padding:4px 8px;font-family:var(--fdisp);font-size:.9rem;cursor:pointer}
+  @media (max-width:760px){ .campip{width:38vw} }
   .stat{background:var(--ink2);border:1px solid var(--ink3);border-radius:12px;padding:10px 8px;text-align:center}
   .sv{font-family:var(--fdisp);font-size:1.2rem}.sk{font-family:var(--fmono);font-size:.6rem;letter-spacing:.1em;color:var(--muted);text-transform:uppercase}
   .toast{position:absolute;left:40%;top:38%;transform:translate(-50%,-50%) scale(.6);opacity:0;font-family:var(--fdisp);font-size:clamp(3rem,10vw,6rem);text-transform:uppercase;color:var(--strike);text-shadow:0 0 50px rgba(255,90,44,.6);pointer-events:none;transition:all .35s cubic-bezier(.2,1.4,.4,1);z-index:5}
@@ -141,9 +149,15 @@
       <button data-ctl="camera">🎥 Use your hand (camera)</button>
     </div>
     <p class="eyebrow" id="pairEyebrow">Scan it — your phone's the ball now</p>
-    <div class="qrbox"><div id="qr"></div></div>
-    <p class="muted" style="margin:0">or go to <b id="joinHost"></b> and enter</p>
-    <div class="code" id="codeOut">····</div>
+    <div id="phonePair" class="col center" style="gap:10px">
+      <div class="qrbox"><div id="qr"></div></div>
+      <p class="muted" style="margin:0">or go to <b id="joinHost"></b> and enter</p>
+      <div class="code" id="codeOut">····</div>
+    </div>
+    <div id="camStart" class="col center" style="gap:10px" hidden>
+      <button class="btn cast" id="camStartBtn" style="font-size:1.05rem;padding:14px 22px">🎥 Start camera on this screen</button>
+      <p class="muted" style="margin:0;font-size:.76rem;max-width:34ch">Prop this device so its camera sees your throwing hand — the lane and the camera are both right here. Or <a href="#" id="camOther" style="color:var(--cast)">use a separate device instead →</a></p>
+    </div>
     <div class="status"><span class="dot wait" id="pairDot"></span><span id="pairMsg">Oiling the lane…</span></div>
     <p class="muted" id="pairHelp" style="margin:0;font-size:.8rem;max-width:42ch">Swing your phone like the ball — tilt to aim, flick your wrist to hook.</p>
     <div class="row"><button class="btn ghost" id="backHome2">← Back</button><button class="btn primary" id="skipPair">Just let me throw</button></div>
@@ -174,6 +188,11 @@
       <button class="btn ghost" id="reportBtn">📋 Session report</button>
     </aside>
   </div>
+  <div class="campip" id="camPip" hidden>
+    <video id="camVideo" playsinline muted></video>
+    <canvas id="camCanvas"></canvas>
+    <div class="cpbar"><button id="cpHand" title="Your throwing hand">RH</button><span id="cpState">starting…</span><button id="cpClose" title="Stop camera">✕</button></div>
+  </div>
   <div class="toast" id="toast">STRIKE!</div>
   <div class="reportCard" id="reportCard" hidden>
     <div class="rcInner">
@@ -191,6 +210,7 @@
 <script src="/bowl/balls.js"></script>
 <script src="/bowl/render3d.js"></script>
 <script src="/bowl/net.js"></script>
+<script src="/bowl/hands.js"></script>
 <script src="/bowl/game.js"></script>
 <script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("/bowl/sw.js").catch(() => {});</script>
 </body>
